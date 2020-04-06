@@ -1,0 +1,16 @@
+Version 1.0
+© Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (lf352@cam.ac.uk) 
+
+This work is licensed under a Creative Commons 
+Attribution-NonCommercial-NoDerivatives 4.0 International License.
+
+Full text of the license can be found at
+https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
+
+Original work that should be cited:
+Feriani, L., Juenet, M., Fowler ,C.J., Bruot, N., Chioccioli, M., Holland, S.M., Bryant, C.E., Cicuta, P.
+Biohpysical Journal (2017)
+"Assessing the Collective Dynamics of Motile Cilia in Cultures of Human Airway Cells by Multiscale DDM"
+http://dx.doi.org/10.1016/j.bpj.2017.05.028
+
+The authors of this work do not own copyright for "cprintf.m", please see its source code for the original licence.
