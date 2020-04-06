@@ -5,7 +5,7 @@ function [ Frequency, Damping, Amplitude, Offset, GOF] = fit_Iqtau_ourcilia( Iqt
 
 %{
 % Version 1.0
-% © Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (lf352@cam.ac.uk) 
+% © Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (luigi.feriani@gmail.com) 
 % 
 % fit_Iqtau_ourcilia.m is licensed under a Creative Commons 
 % Attribution-NonCommercial-NoDerivatives 4.0 International License.

@@ -12,8 +12,10 @@
 % Airway Cells"
 %
 % Chioccioli, M.*, Feriani, L.*, Kotar, J., Bratcher, P. E.**, Cicuta, P.**, Nature Communications 2019
-% "Phenotyping ciliary dynamics and coordination in response to CFTR-modulators 
+% "Phenotyping ciliary dynamics and coordination in response to CFTR-modulators
 % in Cystic Fibrosis respiratory epithelial cells"
+% * These authors have contributed in equal measure
+% ** These authors have contributed in equal measure
 %
 %}
 
@@ -846,8 +848,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         
         
         
-        %% better movement finder
-        
+        %% better movement finder       
         function obj = motion_detection(obj, flag_legacy)
             % starting from the first second of video, find areas with
             % cilia beating
@@ -864,22 +865,24 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 
                 
                 % check if video is loaded, else load the first 1 second
-                if ~exist('fs','var') || isempty(fs)
+                if ~exist('fs','var')
+                    fprintf('\nAccessing global variable fs... ');
+                    global fs;
+                    if isempty(fs)
+                        fprintf('fs was empty, reading the first 1s of the movie now... ');
                     
-                    %                 fprintf('\n\tLoading first second of video...');
+                        % read the first second
+                        try
+                            mo = moviereader(fullfile(obj.Filepath, obj.Filename));
+                            fs = mo.read([1 round(obj.FrameRate)]);
+                        catch EE
+                            disp('Error trying to read:')
+                            disp(fullfile(obj.Filepath, obj.Filename))
+                            error(EE.message)
+                        end
+                    end % if isempty
                     
-                    % read the first second
-                    try
-                        mo = moviereader(fullfile(obj.Filepath, obj.Filename));
-                        fs = mo.read([1 round(obj.FrameRate)]);
-                    catch EE
-                        disp('Error trying to read:')
-                        disp(fullfile(obj.Filepath, obj.Filename))
-                        error(EE.message)
-                    end
-                    %                 cprintf('*[0 .5 0]','Done!')
-                    
-                end %if
+                end %if ~exist
                 
                 % initialise stack
                 sfd = zeros([obj.height, obj.width, round(obj.FrameRate)-2], 'single'); %stdfiltered diffs
