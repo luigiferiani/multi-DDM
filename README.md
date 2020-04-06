@@ -1,10 +1,65 @@
-Analyse_Epithelix_func is a GUI that allows to run the DDM algorithm on a series of microscopy videos.
+# Multi-DDM Analysis
 
-The most important files are DDM_Analysis, that contains the class on which this project was based, and DDM_core, which is just the implementation of the DDM algorithm.
+This file provides a simple guide to running multi-DDM on a series of videos, using the enclosed MATLAB functions. While the code in this package has been developed to analyse videos of ciliated epithelia at ALI culture, multi-DDM is a far more general technique that can be employed in a variety of scenarios.
 
-The other files are necessary for these three to run.
+This code submission is part of the Supplementary Information to the following publication:
 
-The analysis software was targeted towards the analysis of a non-standard video format on a customly modified microscope, might require additional work to be adapted to other formats/microscopes/cameras as well.
+* Chioccioli, M.\*, Feriani, L.\*, Kotar, J., Bratcher, P. E.†, Cicuta, P.†,
+"Phenotyping ciliary dynamics and coordination in response to CFTR-modulators in Cystic Fibrosis respiratory epithelial cells",
+*Nature Communications* (2019).
 
-example_cl.m is an example script of how the GUI can be bypassed for command-line-only analysis.
 
+The paper that first introduces multi-DDM is instead:
+
+* [Feriani, L., et al.,
+"Assessing the Collective Dynamics of Motile Cilia in Cultures of Human Airway Cells",
+*Biohpysical Journal*, (2017).](https://doi.org/10.1016/j.bpj.2017.05.028)
+
+
+## Installation
+
+Simply [add the current folder (and its subfolders) to your MATLAB path](https://uk.mathworks.com/help/matlab/ref/addpath.html).
+
+## Multi-DDM on raw videos
+
+In the first step in the analysis pipeline, multi-DDM is run on each of the (input) raw videos independently. At the end of this step there will be a MATLAB `.mat` file for each of the input video files, containing the results of multi-DDM.
+
+To do this, run the function `Analyse_Epithelix_func`. This will open a GUI where you can set:
+* The path to the data folder. This contains the raw videos
+* A filtering string, so you can select only the files in the data folder that you intend to analyse. This filtering string is set by default to select files in the `.movie` video format, developed by Dr Jurij Kotar and widely used in Prof Pietro Cicuta's group at the Cavendish Laboratory. You will need to change it to select the format of your video files.
+* The path to the analysis (output) folder. This is where the results `.mat` files will be saved to. The default analysis folder path is obtained by appending `_Analysis` to the data folder path.
+* The type of analysis. This selects the size of the tiles that are used by multi-DDM. By selecting an analysis type you can preview in the panel on the right the size of the tiles (in pixels) that will be employed by the analysis algorithm. By selecting `custom`, you will be able to directly input an array of tile sizes for the analysis.
+
+**Note:**
+The software was developed, and mostly used, to analyse high speed
+microscopy videos of Human Airway Epithelial Cells at the Air Liquid Interface.
+While the software is tweaked to cope with `.movie` files, it has provisions for analysing `.avi` files (as long as the necessary codecs are present, i.e. if it can be opened with `VideoReader` in MATLAB), although this feature has not been thoroughly tested.
+
+**Note:**
+The software automatically parses the file name looking for an indication of what objective was used. This is used then to set the px->um conversion. This value would only be correct on the setup described in the main text of the manuscript: Nikon Eclipse Ti-E inverted microscope (Nikon, Japan), Grasshopper®3 GS3-U3-23S6M-C CMOS camera (FLIR Integrated Imaging Solutions GmbH, Germany). 
+To fix this, in the file `./multiddm_functions/DDM_Analysis.m` you should modify the method of the class `DDM_Analysis` named `set_magnification` and provide the correct value of um/px.
+
+
+## Data aggregation
+
+In the second step of the pipeline the results from the individual video files (contained in individual `.mat` files) are aggregated by the function `./multiddm_functions/populate_DDM_Sigmoids_struct.m` in an array of structures. This function allows to organise your experiments data by:
+* sample type
+* time point
+* donor (subject)
+* insert (for technical replicates)
+* position (useful if the microscope returns to the same position in the sample cyclically over time)
+
+An example of how to correctly invoke `./multiddm_functions/populate_DDM_Sigmoids_struct.m` is provided in the script `prepare_accumdata_for_sigmoids.m`. The script is well commented and explains how to set up correctly the input variables for the aggregating function. The script also shows how to save the array of structures containing the aggregated results in a single `.mat` file.
+
+
+## Plotting
+
+In the last step of the analysis we extract individual sets of results from the aggregated results' `.mat` file and plot a distribution of Ciliary Beat Frequency and the curve that, in ALI culture ciliated epithelia, shows how the degree of coordination amongst cilia decays as we assess larger tiles.
+
+The example script `plot_data.m` shows how to select data from the aggregated results' `.mat` file and plot the CBF distribution and the sigmoidal curve that allows to calculate the length scale of coordination.
+
+**Note:**
+The two plotting functions uploaded in this package could be expanded in functionality in order to directly compare multiple sets of results (i.e., two different sample types, or timepoints).
+An example of this is in the figures of the publication this code is supplementary information of.
+However the code thus developed was quite specialised towards a particular
+task, and possibly less flexible and adaptable to the needs of other users. For this reason we preferred to provide a simpler plotting interface that would be a useful starting point to any user of multi-DDM.

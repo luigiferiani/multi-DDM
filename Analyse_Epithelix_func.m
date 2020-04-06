@@ -16,8 +16,8 @@ function [] = Analyse_Epithelix_func(data_folder, analysis_folder, files_string,
 
 
 %{
-% Version 1.0
-% © Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (lf352@cam.ac.uk) 
+% Version 1.1
+% © Luigi Feriani 2019 (luigi.feriani@gmail.com) 
 % 
 % Analyse_Epithelix_func.m is licensed under a Creative Commons 
 % Attribution-NonCommercial-NoDerivatives 4.0 International License.
@@ -70,10 +70,6 @@ if isempty(data_folder) || isempty(analysis_folder) || strcmp(boxes_mode,'custom
         GUI_settings(data_folder, analysis_folder, files_string, boxes_mode);
 end %if
 
-% userID
-
-[~,userID] = system('whoami');
-userID = cellstr(userID);
 
 %% summary output
 
@@ -86,8 +82,6 @@ Summary = [  sprintf('Summary:\n'),...
     sprintf( 'Files string    = %s\n',files_string) ];
 
 fprintf('%s',Summary);
-
-report(Summary);
 
 
 %% prepare for execution
@@ -146,8 +140,9 @@ catch err
 	disp('Script Failed');
 	disp(err.message);
 	
-	
 end
+
+disp('Script Finished')
 
 
 end %function
@@ -519,6 +514,7 @@ switch boxes_mode
 end
 
 end %function
+
 
 
 

@@ -13,8 +13,7 @@ function [ Frequency, Damping, Amplitude, Offset, GOF] = fit_Iqtau_ourcilia( Iqt
 % Original work
 % Feriani, L., et al., Biohpysical Journal 2017
 % "Assessing the Collective Dynamics of Motile Cilia in Cultures of Human
-% Airway Cells by Multiscale DDM"
-% http://dx.doi.org/10.1016/j.bpj.2017.05.028
+% Airway Cells"
 %
 %}
 
@@ -124,6 +123,21 @@ parfor qq = 1:max_q
     if init_Amplitude < 0.03*init_Offset, continue; end;       %if there's any signal
     
     
+    %{
+    %     [fit_out_test, gof]=fminsearch('funz_fittest', [init_Amplitude init_Frequency init_DecayTime init_Offset],...
+    %         optimset('MaxFunEvals',1e6,'MaxIter',1e6,'TolFun',1e-13*init_Amplitude), yy,  xx, xx);
+    %     fit_output.Ampl   = fit_out_test(1);
+    %     fit_output.Freq   = fit_out_test(2);
+    %     fit_output.Damp   = fit_out_test(3);
+    %     fit_output.Offset = fit_out_test(4);
+    %
+    %     Amplitude(qq) = fit_output.Ampl;
+    %     Frequency(qq) = abs(fit_output.Freq);
+    %     Damping(qq)   = fit_output.Damp;
+    %     Offset(qq)    = fit_output.Offset;
+    %     SLS(qq) = gof;
+    %}
+    
     fo = fitoptions('Method','NonLinearLeastSquare',...
         'StartPoint',[init_Amplitude, init_Damping, init_Frequency, init_Offset],...
         'Lower',[0 0 abs(init_Frequency)/2 0],...
@@ -145,11 +159,22 @@ parfor qq = 1:max_q
     Damping(qq)   = fit_output.Damp;
     Offset(qq)    = fit_output.Offset;
         GOF(qq) = gof.rsquare;
-     
+    %     GOF(qq) = gof.sse;
+%     GOF(qq) = sum(  abs(yy(1:floor(end/4))-fit_output(xx(1:floor(end/4)))) ) ;
+    
+%                 cla;
+%                 plot(xx,yy,'o-');
+%                 hold on
+%                 xxpl = xx(1):diff(xx)/10:xx(end);
+%                 plot(xxpl,fit_output(xxpl),'r');
+%                 title(['q = ',num2str(qq)])
+%                 drawnow
+%                 pause(0.01)
+    
     
     
 end
-Frequency = Frequency/(2*pi); 
+Frequency = Frequency/(2*pi); %100 is the framerate used for Cedar videos
 
 end
 

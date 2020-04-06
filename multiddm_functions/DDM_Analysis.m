@@ -1,21 +1,38 @@
 %{
-% Version 1.0
-% © Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (lf352@cam.ac.uk) 
+% Version 1.3
+% Â© Luigi Feriani, Maya Juenet, Pietro Cicuta, 2018 (luigi.feriani@gmail.com) 
 % 
 % DDM_Analysis.m is licensed under a Creative Commons 
 % Attribution-NonCommercial-NoDerivatives 4.0 International License.
 % 
-% Original work
+% Original work:
+%
 % Feriani, L., et al., Biohpysical Journal 2017
 % "Assessing the Collective Dynamics of Motile Cilia in Cultures of Human
-% Airway Cells by Multiscale DDM"
-% http://dx.doi.org/10.1016/j.bpj.2017.05.028
+% Airway Cells"
+%
+% Chioccioli, M.*, Feriani, L.*, Kotar, J., Bratcher, P. E.**, Cicuta, P.**, Nature Communications 2019
+% "Phenotyping ciliary dynamics and coordination in response to CFTR-modulators 
+% in Cystic Fibrosis respiratory epithelial cells"
 %
 %}
 
 classdef DDM_Analysis < matlab.mixin.Copyable
     %DDM_analysis class to handle and run ddm analysis on microscope videos
-    %   Detailed explanation goes here
+    %   Version 1.3 Changelog - 04/05/2018:
+    %       changed way multiDDM is done, massive speedup if user has a
+    %       gpu, good speedup without. 
+    %       Methods affected:Variable_BoxSize_Analysis (but no change in
+    %       interface with the user), DDM_on_Boxes became
+    %       Setup_DDM_on_Boxes, added fit_Boxes
+    %   Version 1.2 Changelog: 
+    %       brand new motion detection algorithm, new properties
+    %   Version 1.1 Changelog: 
+    %       added support to 2 slightly different ways to find good boxes
+    %       based on std_fs: by setting flag_ditch_imadjust it should work
+    %       better on FOVs with just a few beating cells. This can be done
+    %       a posteriori by calling gather_results with
+    %       flag_recalculate_good_boxes set to true
     
     properties
         Filename            %Name of the video file
@@ -29,6 +46,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         FrameRate           %
         Magnification       %for px2mum conversions
         std_fs              %standard deviation of pixel intensity through time
+        lstd_sfd            % log10 of std of stdfilt differences between frames 2 apart
+        detected_motion     % forreground objects from lstd_sfd
         Results             %results structure array
         %         fs                  %video as a 3d matrix. it will not be saved
         IsMovieCorrupted    %control variable for failsafe movie reading
@@ -40,12 +59,14 @@ classdef DDM_Analysis < matlab.mixin.Copyable
     properties (Hidden = true)
         px2mum              %pixels to micron conversion
         N_couple_frames_to_average %how many couples of frames to average in DDM_core
+        max_tau
     end
     
     properties (SetAccess = private, Hidden = true)
         col_sum_std_fs
         row_sum_std_fs
-        max_tau
+        col_sum_lstd_sfd
+        row_sum_lstd_sfd
         max_tau_fitted
     end
     
@@ -93,7 +114,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             global fs;
             if isempty(strfind(filename,'.movie'))
-                filename
+                disp(filename)
                 [fs, vi] = avi2greyscaleframestack(fullfile(obj.Filepath,obj.Filename));
                 obj.height      = vi.Height;
                 obj.width       = vi.Width;
@@ -126,7 +147,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                     obj.load_movie;
                     %                     obj.FrameRate   = mo.FrameRate;
                     
-                    if obj.IsMovieCorrupted,    %warn user that the movie was corrupted
+                    if obj.IsMovieCorrupted    %warn user that the movie was corrupted
                         cprintf('*[1 .3 0]',['Movie file was corrupted, only ',num2str(obj.NumberOfFrames),' frames out of ',num2str(obj.TotalNumberOfFrames),' were read. ']);
                     end
                 end
@@ -134,14 +155,14 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             end
             cprintf('*[0 .5 0]','Done!')
             
-            %% calculating standard deviation of video
+            %% calculating standard deviation of video  % deprecated as a motion detection algorithm but let's keep it
             
-            fprintf('\nCalculating standard deviation of pixel intensity through time...');
+            fprintf('\nCalculating standard deviation of pixel intensity through time... ');
 %             std_fs = zeros(obj.height,obj.width,'single');
             std_fs = zeros(obj.height,obj.width,'double');
             parfor i=1:obj.height    %doing the std of the entire video is too RAM expensive, so for loop on the rows
 %                 std_fs(i,:) = squeeze( std( single( fs(i,:,:) ) ,1,3) );
-                std_fs(i,:) = squeeze( std( double( fs(i,:,:) ) ,1,3) );
+                std_fs(i,:) = squeeze( std( double( fs(i,:,:) ) ,0,3) );
             end
             
             obj.col_sum_std_fs = sum(std_fs,1); %sum of each column of std (vertically), it's a row vector
@@ -151,6 +172,15 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             cprintf('*[0 .5 0]','Done!')
             
+            
+            %% call new motion detection algorithm
+            
+            obj.motion_detection;
+            
+            obj.col_sum_lstd_sfd = sum(obj.lstd_sfd,1);     % sum of each column of lstd_sfd (vertically), it's a row vector
+            obj.row_sum_lstd_sfd = sum(obj.lstd_sfd,2);     % sum of each column of lstd_sfd (horizontally), it's a column vector
+            
+            
             %% initialising some global parameters
             obj.max_tau = floor(obj.NumberOfFrames/2);
             obj.max_tau_fitted = floor(obj.max_tau/2); %default, maybe change in future
@@ -159,12 +189,22 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         %% method that launches DDM on boxsizes specified by input vector
-        function obj = VariableBoxSize_Analysis(obj,boxsizevect)
+        function obj = VariableBoxSize_Analysis(obj, boxsizevect)
             
-            fprintf('\nStarting BoxSize Analysis...');
+            if ~exist('fs','var')
+                fprintf('\nAccessing global variable fs... ');
+                global fs;
+                if isempty(fs)
+                    fprintf('fs was empty, loading the movie now... ');
+                    obj.load_movie;
+                end
+                cprintf('*[0 .5 0]','Done!')
+            end
+            
+            fprintf('\nStarting BoxSize Analysis... ');
             %% vector input check
-            fprintf('\n\tChecking input...');
-            if isvector(boxsizevect),
+            fprintf('\n\tChecking input... ');
+            if isvector(boxsizevect)
                 boxsizevect = boxsizevect(:); %if vector put it in column
             end
             if any(boxsizevect > obj.width | boxsizevect > obj.height)
@@ -181,10 +221,11 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             boxsizevect = unique(boxsizevect);  %throw away doubles, also sorts from small to big
             boxsizevect = flipud(boxsizevect); %boxsizevect is a column now, so this inverts the order
             if ~isempty(obj.Results)
-                if ~isempty(intersect(boxsizevect,[obj.Results(:).BoxSize])),
+                if ~isempty(intersect(boxsizevect,[obj.Results(:).BoxSize]))
                     alreadythere = intersect(boxsizevect,[obj.Results(:).BoxSize]);
                     alreadythere = alreadythere(:)'; %force to be row
-                    cprintf('*[1 .3 0]',['\nResults for BoxSizes = ',num2str(alreadythere),' existed already, not going to overwrite it.']);
+                    cprintf('*[1 .3 0]',['\n\tResults for BoxSizes = ',num2str(alreadythere),' existed already, not going to overwrite it. ']);
+                    fprintf('\n\t');
                     if numel(alreadythere) == numel(boxsizevect)
                         cprintf('*[1 .3 0]','\nThere''s already data for all these box sizes, skipping this video. ');
                         return
@@ -213,28 +254,46 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             cprintf('*[0 .5 0]','Done!')
             fprintf(['\n\tDDM will be run on Boxes of BoxSize ',num2str(boxsizevect(:)')]); % (:)' sintax to get for sure row vector
             
-            %% assign BoxSize to results and call function that runs DDM on boxes
+            %% assign BoxSize to results and call function that sets up DDM on boxes
+            
             for i = 1:N_boxsizes
-                j=N_existing_entries+i;
+                j = N_existing_entries+i;
                 BoxSize = boxsizevect(i);
-                fprintf(['\n\tStarting Analysis with BoxSize = ',num2str(BoxSize)]);
+                fprintf(['\n\tSetting up data structure for Analysis with BoxSize = ',num2str(BoxSize)]);
                 obj.Results(j).BoxSize = BoxSize;
-                obj.DDM_on_Boxes(BoxSize);
+                obj.setup_DDM_on_Boxes(BoxSize);
                 retrieved_max_mode_fitted = numel(obj.Results(j).Box(1).Frequency);
-                obj.Results(j).qVec = 2*pi*[1:retrieved_max_mode_fitted]./BoxSize; %good for plotting, have to retrieve up until which mode I fitted the Iqtau because it is not a property of the class
-                fprintf(['\n\tDone']);
+                obj.Results(j).qVec = 2*pi*(1:retrieved_max_mode_fitted)./BoxSize; %good for plotting, have to retrieve up until which mode I fitted the Iqtau because it is not a property of the class
+                fprintf('\n\tDone');
+            end
+            
+            % now actually run multiDDM on the boxsizes we asked
+            if ~isempty(boxsizevect)
+                fprintf('\n\tRunning multiDDM algorithm on all boxes... ');
+                ind_to_run = N_existing_entries+1 : N_existing_entries+numel(boxsizevect);
+                obj.Results(ind_to_run) = ...
+                    multiDDM_core(fs, obj.N_couple_frames_to_average, obj.Results(ind_to_run));
+                cprintf('*[0 .5 0]','Done!');
+            end
+            
+            % and now fit the analysed boxes
+            for i = 1:N_boxsizes
+                BoxSize = boxsizevect(i);
+                fprintf(['\n\tStarting fit of boxes of BoxSize = ',num2str(BoxSize)]);
+                obj.fit_Boxes(BoxSize);
+                fprintf('\n\tDone');
             end
             
         end
         
         
         %% method that runs DDM on all possible boxes of specified boxsize and updates correspondent results entry
-        function obj = DDM_on_Boxes(obj,BoxSize)
-            global fs;
+        function obj = setup_DDM_on_Boxes(obj,BoxSize)
+%             global fs;
             
             warning('off','MATLAB:mir_warning_maybe_uninitialized_temporary');%turn off annoying warning
             
-            %% input check (function may be called directly by user)
+            %% input check (function may be called directly by user, but it shouldn't)
             
             if ~isscalar(BoxSize), error('BoxSize must be a scalar - to use an array, call VariableBoxSize_Analysis instead!!');end
             if BoxSize > obj.width || BoxSize > obj.height
@@ -242,7 +301,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 cprintf('*[1 .3 0]',['Impossible to run the analysis with the desired BoxSize, as it is bigger than at least one of the dimensions of the field of view. The analysis will be run on the maximum possible BoxSize, i.e. BoxSize = ',num2str(BoxSize)]);
             end
             if mod(BoxSize,2) %if odd BoxSize reduce of 1
-                cprintf('*[1 .3 0]','BoxSize can''t be odd, reducing it of a unit.');
+                cprintf('*[1 .3 0]','BoxSize can''t be odd, reducing it of a unit. ');
                 BoxSize = BoxSize-1;
             end
             if BoxSize == 0
@@ -305,13 +364,15 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             %find where to place (in the horizontal direction) the [row_span, col_span] region to be DDM-analysed
             for i = obj.width - col_span + 1 : -1 : 1  %sneaky allocation
-                dummy(i) = sum(obj.col_sum_std_fs(i:i+col_span-1));
+%                 dummy(i) = sum(obj.col_sum_std_fs(i:i+col_span-1));
+                dummy(i) = sum(obj.col_sum_lstd_sfd(i:i+col_span-1));
             end
             [~,col_offset] = max(dummy);
             clear dummy
             %find where to place (in the vertical direction) the [row_span, col_span] region to be DDM-analysed
             for i = obj.height - row_span + 1 : -1 : 1  %sneaky allocation
-                dummy(i) = sum(obj.row_sum_std_fs(i:i+row_span-1));
+%                 dummy(i) = sum(obj.row_sum_std_fs(i:i+row_span-1));
+                dummy(i) = sum(obj.row_sum_lstd_sfd(i:i+row_span-1));
             end
             [~,row_offset] = max(dummy);
             clear dummy
@@ -319,23 +380,31 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             %% select good boxes based on thresholding of standard deviation
             
-            ind_good_boxes = find_good_boxes(obj.std_fs(row_offset:row_offset+row_span-1, col_offset:col_offset+col_span-1), BoxSize);
+%             ind_good_boxes =
+%             find_good_boxes(obj.std_fs(row_offset:row_offset+row_span-1,
+%             col_offset:col_offset+col_span-1), BoxSize); %old function
+            ind_good_boxes = obj.find_boxes_with_motion(row_offset, col_offset, BoxSize);
             
             %% saving in each Box the relative bit of std_fs
             
-            fprintf('\n\t\tSaving portion of standard deviation of pixel intensity in time relative to each Box... ');
+%             fprintf('\n\t\tSaving portion of standard deviation of pixel intensity in time relative to each Box... ');
             for i = 1:N_Boxes_row
                 for j = 1:N_Boxes_col
                     
                     ii = sub2ind([N_Boxes_row, N_Boxes_col], i, j);
-                    obj.Results(iir).Box(ii).std_fs = obj.std_fs(row_offset + (i-1)*BoxSize : row_offset + (i)*BoxSize -1 ,...
-                        col_offset + (j-1)*BoxSize : col_offset + (j)*BoxSize -1);
+                    obj.Results(iir).Box(ii).std_fs = [];
+                    obj.Results(iir).Box(ii).lstd_sfd = [];
+%                     obj.Results(iir).Box(ii).std_fs = obj.std_fs(row_offset + (i-1)*BoxSize : row_offset + (i)*BoxSize -1 ,...
+%                         col_offset + (j-1)*BoxSize : col_offset + (j)*BoxSize -1);
+%                     obj.Results(iir).Box(ii).lstd_sfd = obj.lstd_sfd(row_offset + (i-1)*BoxSize : row_offset + (i)*BoxSize -1 ,...
+%                         col_offset + (j-1)*BoxSize : col_offset + (j)*BoxSize -1);
                 end
             end
-            cprintf('*[0 .5 0]','Done!')
+%             cprintf('*[0 .5 0]','Done!')
             
             %% running DDM on each region of the video, storing Iqtaus in relative Box
-            
+            % not done here anymore, see end of Variable_BoxSize_analysis
+            %{
             fprintf('\n\t\tRunning DDM algorithm on each Box... ');
             fprintf('\n\t\t\tAnalysing Box ');
             for j = 1:N_Boxes_col
@@ -351,10 +420,11 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             fprintf('\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b') % deletes "Analysing Box"
             
             cprintf('*[0 .5 0]','Done!');
-            
+            %}
             
             %% running fit_Iqtau_ourcilia on each Box.Iqtau
-            
+            % not done here anymore, see end of Variable_BoxSize_analysis
+            %{
             fprintf('\n\t\tFitting Iqtau matrix for each Box... ');
             fprintf('\n\t\t\tFitting Box ');
             for ii = 1:N_Boxes
@@ -366,7 +436,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             fprintf('\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b') % deletes "fitting box"
             
             cprintf('*[0 .5 0]','Done!');
-            
+            %}
             
             %% saving parameters in results
             
@@ -376,15 +446,52 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
         end
         
+        %% function that runs fits on the boxes
+        function obj = fit_Boxes(obj, BoxSize)
+            
+            % find where to put the results
+            iir = find([obj.Results(:).BoxSize] == BoxSize); %look for an entry of results with desired BoxSize
+            if numel(iir) > 1
+                error('Something went wrong in input checking. There are two results entries with the same BoxSize')
+            end
+            if isempty(iir)
+                error('The boxes of the BoxSize you wish to fit haven''t been analysed by multiDDM yet');
+            end
+
+            % running fit_Iqtau_ourcilia on each Box.Iqtau
+            N_Boxes = numel(obj.Results(iir).Box);
+            max_mode_fitted = floor(BoxSize/4);
+            
+            fprintf('\n\t\tFitting Iqtau matrix for each Box... ');
+            fprintf('\n\t\t\tFitting Box ');
+            for ii = 1:N_Boxes
+                
+                fprintf('%.6d / %.6d',ii,N_Boxes);
+                [freq, damp, ampl, offs, gof] = fit_Iqtau_ourcilia(obj.Results(iir).Box(ii).Iqtau,...
+                    max_mode_fitted, obj.max_tau_fitted);
+                obj.Results(iir).Box(ii).Frequency = freq;
+                obj.Results(iir).Box(ii).Damping = damp;
+                obj.Results(iir).Box(ii).Amplitude = ampl;
+                obj.Results(iir).Box(ii).Offset = offs;
+                obj.Results(iir).Box(ii).GOF = gof;
+                
+                fprintf('\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b')
+            end
+            fprintf('\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b') % deletes "fitting box"
+            
+            cprintf('*[0 .5 0]','Done!');
+            
+        end %function
+        
         %% interactive creation of kymograph
         function obj = kymograph(obj,N_kymographs)
             
-            if nargin==1,
+            if nargin==1
                 N_kymographs = 1;
             end
             
             global fs;
-            if size(fs) ~= [obj.height, obj.width, obj.NumberOfFrames]
+            if size(fs) ~= horzcat(obj.height, obj.width, obj.NumberOfFrames)
                 cprintf('*[1 .3 0]','It looks like the video in the memory is not the same as specified by the instance of the class. Loading the proper video...');
                 fs = load_movie(obj);
             end
@@ -486,7 +593,6 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         %% parse filename for magnification string
-		% CAREFUL this has to be modified according to which camera you're using
         function obj = set_magnification(obj)
             
             if ~isempty(regexpi(obj.Filename,'4X'))
@@ -544,14 +650,27 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         %% function that gathers the results (does means etc)
-        function obj = gather_results(obj)
+        function obj = gather_results(obj, flag_recalculate_good_boxes)
+            
+            % input checking
+            
+            if nargin < 2 || isempty(flag_recalculate_good_boxes)
+                flag_recalculate_good_boxes = false;
+            end
+            
             
             for ii = 1:numel(obj.Results) %create a vector with median frequency of each box: as long as the number of boxes for each boxsize
                 
-                if ~isfield(obj.Results(ii),'ind_good_boxes') || (isfield(obj.Results(ii),'ind_good_boxes') && isempty(obj.Results(ii).ind_good_boxes) )
-                    row_span = floor(obj.height / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;   %number of boxes that fit (vertically) in the field of view given BoxSize
-                    col_span = floor(obj.width  / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;
-                    ind_good_boxes = find_good_boxes(obj.std_fs(obj.Results(ii).row_offset:obj.Results(ii).row_offset+row_span-1,obj.Results(ii).col_offset:obj.Results(ii).col_offset+col_span-1), obj.Results(ii).BoxSize);
+                if ~isfield(obj.Results(ii),'ind_good_boxes') ||...
+                        (isfield(obj.Results(ii),'ind_good_boxes') && isempty(obj.Results(ii).ind_good_boxes) ) || ...
+                        flag_recalculate_good_boxes
+%                     row_span = floor(obj.height / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;   %number of boxes that fit (vertically) in the field of view given BoxSize
+%                     col_span = floor(obj.width  / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;
+%                     ind_good_boxes = find_good_boxes(obj.std_fs(obj.Results(ii).row_offset:obj.Results(ii).row_offset+row_span-1,obj.Results(ii).col_offset:obj.Results(ii).col_offset+col_span-1), ...
+%                         obj.Results(ii).BoxSize, flag_ditch_imadjust);
+                    ind_good_boxes = obj.find_boxes_with_motion(obj.Results(ii).row_offset,...
+                        obj.Results(ii).col_offset, ...
+                        obj.Results(ii).BoxSize);
                     obj.Results(ii).ind_good_boxes = ind_good_boxes;
                 end
                 
@@ -595,7 +714,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             if ~isfield(obj.SAVAlike,'ind_good_bins') && ~isempty(obj.SAVAlike)
                 bsz = mean(floor([obj.height, obj.width]./size(obj.SAVAlike.frequency_map)));
-                obj.SAVAlike.ind_good_bins = find_good_boxes(obj.std_fs,bsz);
+%                 obj.SAVAlike.ind_good_bins = find_good_boxes(obj.std_fs,bsz);
+                obj.SAVAlike.ind_good_bins = obj.find_boxes_with_motion(1,1,bsz);
                 ind = obj.SAVAlike.frequency_map(:) > 1 & obj.SAVAlike.frequency_map(:) < 30; %physical constraints
                 ind = ind & obj.SAVAlike.ind_good_bins(:);          % discard empty bins by thresholding the std
                 obj.SAVAlike.mean_frequency = mean(obj.SAVAlike.frequency_map(ind));
@@ -725,24 +845,192 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         
-    end
-    
+        
+        %% better movement finder
+        
+        function obj = motion_detection(obj, flag_legacy)
+            % starting from the first second of video, find areas with
+            % cilia beating
+            
+            if nargin < 2 || isempty(flag_legacy)
+                flag_legacy = false;
+            end
+            
+            sfwsz = 11;                 % size of the stdfiltering window
+                
+            nbins_greylevels = 512;     % number of bins for grey level histogram
+
+            if isempty(obj.lstd_sfd)
+                
+                
+                % check if video is loaded, else load the first 1 second
+                if ~exist('fs','var') || isempty(fs)
+                    
+                    %                 fprintf('\n\tLoading first second of video...');
+                    
+                    % read the first second
+                    try
+                        mo = moviereader(fullfile(obj.Filepath, obj.Filename));
+                        fs = mo.read([1 round(obj.FrameRate)]);
+                    catch EE
+                        disp('Error trying to read:')
+                        disp(fullfile(obj.Filepath, obj.Filename))
+                        error(EE.message)
+                    end
+                    %                 cprintf('*[0 .5 0]','Done!')
+                    
+                end %if
+                
+                % initialise stack
+                sfd = zeros([obj.height, obj.width, round(obj.FrameRate)-2], 'single'); %stdfiltered diffs
+                for i = size(sfd,3):-1:1
+                    sfd(:,:,i) = single(stdfilt( medfilt2( diff(single(fs(:,:,[i,i+2])),1,3) ,'symmetric') , ones(sfwsz)));
+                end %for
+                
+                % now take std in time
+                std_sfd = std(sfd,0,3);
+                std_sfd(std_sfd == 0) = min(std_sfd(std_sfd>0)); % prevents an error if the video was saturated
+                obj.lstd_sfd = mat2gray(log10( std_sfd ));       % log on graylevels, deals better with peak colours
+                
+                % fix the very high values at the very edges
+                mm = min(obj.lstd_sfd(:));
+                obj.lstd_sfd([1:ceil(sfwsz/2), end-floor(sfwsz/2):end], :) = mm;
+                obj.lstd_sfd(:, [1:ceil(sfwsz/2), end-floor(sfwsz/2):end]) = mm;
+                
+                
+            end %if no log motion map
+            
+            if flag_legacy
+                
+                cprintf('*[1 .3 0]','Using legacy motion detection')
+                level = graythresh(obj.lstd_sfd(ceil(sfwsz/2)+1:end-ceil(sfwsz/2),ceil(sfwsz/2)+1:end-ceil(sfwsz/2)));
+                level = 0.7 * level;
+                obj.detected_motion = imopen(imbinarize(obj.lstd_sfd, level),strel('disk',9));
+                
+            else
+                
+                % fit the histogram of grey levels of lstd_sfd
+                % with a gaussian, then put to minimum all the points
+                % within a sigms of the main peak which is usually the
+                % background
+                [yhist, xhist] = histcounts(obj.lstd_sfd(:), linspace(0, 1, nbins_greylevels + 1),...
+                    'normalization','probability');
+                yhist = yhist(:);
+                xhist = xhist(:);
+                xhist = (xhist(1:end-1)+xhist(2:end))/2;
+                
+                % initial values for fitting
+                [a0, b0] = findpeaks(smooth(yhist),xhist,...
+                    'NPeaks',1,'MinPeakHeight',0.5e-3);
+                c0 = 0.1;
+                
+                % fitting
+                ft = fittype('gauss1');
+                fo = fitoptions('method','nonlinearleastsquares',...
+                    'startpoint',[a0, b0, c0],...
+                    'Upper',[1 1 1],'lower',[0 0 0]);
+                idx_to_fit = xhist<=b0+c0/sqrt(2);
+                idx_to_fit(1) = false;  %because of edges, this is overly populated
+                fit_out = fit(xhist(idx_to_fit),yhist(idx_to_fit),ft,fo);
+                sgm = fit_out.c1/sqrt(2);
+                
+                % now find background, put it to min
+                bg = obj.lstd_sfd <= fit_out.b1+2*sgm;
+                bg = imclose(bg,strel('disk',9));
+                
+                
+                % if this failed call legacy method
+                if any(~bg(:)) % all's well
+                    % binarise
+                    obj.detected_motion = ~bg;
+                else
+                    obj.motion_detection(true);
+                end
+                
+            end % if flag_legacy
+            
+        end %function
+        
+        
+        %% find where the motion mask is true within a box
+        function mask = find_boxes_with_motion(obj, row_offset, col_offset, bsz)
+            %find_boxes_with_motion checks which ones of the bsz-by-bsz
+            %boxes is over a region detected as true by detect_motion
+            
+            % run motion detection if needed
+            if isempty(obj.detected_motion) || isempty(obj.lstd_sfd)
+                obj.motion_detection;
+            end
+            
+            row_span = floor(obj.height / bsz) * bsz;   %number of boxes that fit (vertically) in the field of view given BoxSize
+            col_span = floor(obj.width  / bsz) * bsz;
+
+            % chop the edges of detected motion off according to row_offset
+            % and col_offset
+            BW = obj.detected_motion(row_offset:row_offset+row_span-1,col_offset:col_offset+col_span-1);
+            
+            % prepare binning map to go from bigmask to mask, this is
+            % still common to 2 3 4 methods
+            w = size(BW,2);
+            h = size(BW,1);
+            binningmap = col2im(repmat(1:floor(w*h/bsz^2),bsz*bsz,1),...
+                bsz.*[1 1], bsz*[floor(h/bsz) floor(w/bsz)],'distinct');
+            
+            % take the box as long as there is 1 true pixel in the mask under it
+            mask = reshape(accumarray(binningmap(:), BW(:)), h/bsz, w/bsz) > 0;
+            
+        end %function
+        
+    end %methods
+
     
 end
 
 %% select good boxes based on thresholding of standard deviation
 
-function mask = find_good_boxes(IM, bsz)
+function mask = find_good_boxes(IM, bsz, flag_ditch_imadjust)
+
+if nargin < 3 || isempty(flag_ditch_imadjust)
+    flag_ditch_imadjust = false;
+end %if
 
 IM = mat2gray(IM);      %converts to [0 1]
 [height, width] = size(IM);
 binningmap = col2im(repmat(1:floor(width*height/bsz^2),bsz*bsz,1), bsz.*[1 1], bsz*[floor(height/bsz) floor(width/bsz)],'distinct');
-bIM = reshape( accumarray(binningmap(:),IM(:)), height/bsz, width/bsz) ./ bsz.^2;
-abIM = imadjust(bIM);
-mask = im2bw(abIM,min(1,graythresh(bIM)));
 
-if bsz < 128
+
+if flag_ditch_imadjust
+
+    % highlight local roughness
+    fIM = stdfilt(IM, ones(5));
+    
+    % smooth it
+    sIM = mat2gray(imgaussfilt(fIM, 5));
+    saIM = imadjust(sIM, stretchlim(sIM, [0.01, 1-1e-3]));
+    
+    % global thresholding
+    [level, ~] = graythresh(saIM);
+    bigmask = imbinarize(saIM, 0.65*level);
+    bigmask = bwmorph(bigmask,'clean');
+
+    % take the box as long as there is 1 true pixel in the mask under it
+    mask = reshape(accumarray(binningmap(:), bigmask(:)), height/bsz, width/bsz) > 0;
+    
+else
+    
+    bIM = reshape( accumarray(binningmap(:),IM(:)), height/bsz, width/bsz) ./ bsz.^2;
+    abIM = imadjust(bIM);
+    mask = im2bw(abIM,min(1,graythresh(bIM)));
+
+end %if
+
+
+if bsz < 64
     mask = bwmorph(mask,'clean'); % maybe want to think about this again
 end
 
 end
+
+
+
+

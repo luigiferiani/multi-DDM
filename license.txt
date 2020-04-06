@@ -1,16 +1,20 @@
-Version 1.0
-� Luigi Feriani, Maya Juenet, Pietro Cicuta, 2017 (lf352@cam.ac.uk) 
-
 This work is licensed under a Creative Commons 
 Attribution-NonCommercial-NoDerivatives 4.0 International License.
 
 Full text of the license can be found at
 https://creativecommons.org/licenses/by-nc-nd/4.0/legalcode
 
-Original work that should be cited:
-Feriani, L., Juenet, M., Fowler ,C.J., Bruot, N., Chioccioli, M., Holland, S.M., Bryant, C.E., Cicuta, P.
+If using this code please cite the following papers:
+
+Feriani, L., Juenet, M., Fowler ,C.J., Bruot, N., Chioccioli, M., Holland, S.M., Bryant, C.E., Cicuta, P.,
+"Assessing the Collective Dynamics of Motile Cilia in Cultures of Human Airway Cells by Multiscale DDM",
 Biohpysical Journal (2017)
-"Assessing the Collective Dynamics of Motile Cilia in Cultures of Human Airway Cells by Multiscale DDM"
 http://dx.doi.org/10.1016/j.bpj.2017.05.028
 
-The authors of this work do not own copyright for "cprintf.m", please see its source code for the original licence.
+Chioccioli, M.*, Feriani, L.*, Kotar, J., Bratcher, P. E.†, Cicuta, P.†,
+"Phenotyping ciliary dynamics and coordination in response to CFTR-modulators in Cystic Fibrosis respiratory epithelial cells",
+Nature Communications (2019).
+
+As the copyrights holders vary across the functions in this package, each function covered by the licence has a separate statement at the beginning, listing the copyrights holders.
+
+The authors of this work do not own copyright for "cprintf.m" and "structstruct.m, please see their source codes for the original licences.
