@@ -75,7 +75,6 @@ end %if
 
 Summary = [  sprintf('Summary:\n'),...
     sprintf( 'Computer        = %s\n',getenv('computername')),...
-    sprintf( 'User            = %s\n',userID{1}),...
     sprintf( 'Data folder     = %s\n',data_folder),...
     sprintf( 'Analysis folder = %s\n',analysis_folder),...
     [sprintf('Box sizes       = '),  sprintf('%d  ',boxsizes_vector)], sprintf('\n'),...
@@ -183,7 +182,7 @@ hf.Position = [0.25 0.1 0.5 0.8];
 % panel choose data_folder
 hp1 = uipanel;
 hp1.Title = 'Type path to data folder or use the button to select the folder interactively';
-hp1.FontSize = 12;
+hp1.FontSize = 10;
 hp1.Units = 'normalized';
 hp1.Position = [0 0.92 1 0.08];
 % hp1.BorderType = 'none';
@@ -192,7 +191,7 @@ hp1.Position = [0 0.92 1 0.08];
 hedt1 = uicontrol(hp1);
 hedt1.Style = 'edit';
 hedt1.String = data_folder;
-hedt1.FontSize = 12;
+hedt1.FontSize = 10;
 hedt1.HorizontalAlignment = 'left';
 hedt1.Units = 'normalized';
 hedt1.Position = [0.01 0.4 0.89 0.5];
@@ -203,7 +202,7 @@ hedt1.Callback = @type_data_folder;
 hb1 = uicontrol(hp1);
 hb1.Style = 'pushbutton';
 hb1.String = '...';
-hb1.FontSize = 12;
+hb1.FontSize = 10;
 hb1.HorizontalAlignment = 'center';
 hb1.Units = 'normalized';
 hb1.Position = [0.91 0.38 0.08 0.54];
@@ -213,7 +212,7 @@ hb1.Callback = @choose_data_folder;
 % panel choose files string
 hp2 = uipanel;
 hp2.Title = 'Type string to identify files, press enter to update list preview';
-hp2.FontSize = 12;
+hp2.FontSize = 10;
 hp2.Units = 'normalized';
 hp2.Position = [0 0.84 1 0.08];
 
@@ -221,7 +220,7 @@ hp2.Position = [0 0.84 1 0.08];
 hedt2 = uicontrol(hp2);
 hedt2.Style = 'edit';
 hedt2.String = files_string;
-hedt2.FontSize = 12;
+hedt2.FontSize = 10;
 hedt2.HorizontalAlignment = 'left';
 hedt2.Units = 'normalized';
 hedt2.Position = [0.01 0.4 0.89 0.5];
@@ -229,7 +228,7 @@ hedt2.Callback = @update_list;
 
 % panel preview files list
 hp3 = uipanel;
-hp3.FontSize = 12;
+hp3.FontSize = 10;
 hp3.Units = 'normalized';
 hp3.Position = [0 0.3 1 0.54];
 
@@ -245,7 +244,7 @@ hlist2.Position = [0 0 1 1];
 % panel choose analysis_folder
 hp4 = uipanel;
 hp4.Title = 'Type path to analysis folder or use the button to select the folder interactively';
-hp4.FontSize = 12;
+hp4.FontSize = 10;
 hp4.Units = 'normalized';
 hp4.Position = [0 0.22 1 0.08];
 % hp4.BorderType = 'none';
@@ -254,7 +253,7 @@ hp4.Position = [0 0.22 1 0.08];
 hedt4 = uicontrol(hp4);
 hedt4.Style = 'edit';
 hedt4.String = analysis_folder;
-hedt4.FontSize = 12;
+hedt4.FontSize = 10;
 hedt4.HorizontalAlignment = 'left';
 hedt4.Units = 'normalized';
 hedt4.Position = [0.01 0.4 0.89 0.5];
@@ -264,7 +263,7 @@ hedt4.Callback = @update_analysis_folder;
 hb4 = uicontrol(hp4);
 hb4.Style = 'pushbutton';
 hb4.String = '...';
-hb4.FontSize = 12;
+hb4.FontSize = 10;
 hb4.HorizontalAlignment = 'center';
 hb4.Units = 'normalized';
 hb4.Position = [0.91 0.38 0.08 0.54];
@@ -274,7 +273,7 @@ hb4.Callback = @choose_analysis_folder;
 % panel choose boxsizes
 hrbg5 = uibuttongroup;
 hrbg5.Title = 'Choose type of analysis';
-hrbg5.FontSize = 12;
+hrbg5.FontSize = 10;
 hrbg5.Units = 'normalized';
 hrbg5.Position = [0 0.14 1 0.08];
 hrbg5.SelectionChangedFcn = @update_boxsizes;
@@ -285,27 +284,27 @@ hrbg5.SelectionChangedFcn = @update_boxsizes;
 hrb5(1) = uicontrol(hrbg5);
 hrb5(1).Style = 'radiobutton';
 hrb5(1).String = 'quick';
-hrb5(1).FontSize = 12;
+hrb5(1).FontSize = 10;
 hrb5(1).Units = 'Normalized';
 hrb5(1).Position = [0.01 0.35 0.1 0.5];
 
 hrb5(2) = uicontrol(hrbg5);
 hrb5(2).Style = 'radiobutton';
 hrb5(2).String = 'sigmoids';
-hrb5(2).FontSize = 12;
+hrb5(2).FontSize = 10;
 hrb5(2).Units = 'Normalized';
 hrb5(2).Position = [0.11 0.35 0.1 0.5];
 
 hrb5(3) = uicontrol(hrbg5);
 hrb5(3).Style = 'radiobutton';
 hrb5(3).String = 'custom';
-hrb5(3).FontSize = 12;
+hrb5(3).FontSize = 10;
 hrb5(3).Units = 'Normalized';
 hrb5(3).Position = [0.24 0.35 0.1 0.5];
 
 hedt5 = uicontrol(hrbg5);
 hedt5.Style = 'edit';
-hedt5.FontSize = 12;
+hedt5.FontSize = 10;
 hedt5.HorizontalAlignment = 'left';
 hedt5.Units = 'normalized';
 hedt5.Position = [0.35 0.35 0.64 0.5];
@@ -522,56 +521,17 @@ function [] = splash()
 %%
 home
 
-% check which font
-fontname = '';
-try
-    dummy = com.mathworks.services.Prefs.getFontPref('Desktop.Font.Code2');
-    fontname = char(dummy.getFontName);
-catch
-    fontname = 'unknown';
-end
 
-% choose characters based on font
-switch fontname
-    
-    case 'DejaVu Sans Mono' % 10
-        
-        ULc = char(9556);   % upper left corner
-        URc = char(9559);   % upper right corner
-        LLc = char(9562);   % lower left corner
-        LRc = char(9565);   % lower right corner
-        HL  = char(9552);   % horizontal line
-        VL  = char(9553);   % vertical line
-        
-    case 'Monospaced.plain'
-        
-        ULc = '+';   % upper left corner
-        URc = '+';   % upper right corner
-        LLc = '+';   % lower left corner
-        LRc = '+';   % lower right corner
-        HL  = '+';   % horizontal line
-        VL  = '+';   % vertical line
-        
-    case 'unknown'
-        
-        ULc = char(9556);   % upper left corner
-        URc = char(9559);   % upper right corner
-        LLc = char(9562);   % lower left corner
-        LRc = char(9565);   % lower right corner
-        HL  = char(9552);   % horizontal line
-        VL  = char(9553);   % vertical line
-        
-    otherwise
-        
-        ULc = char(9556);   % upper left corner
-        URc = char(9559);   % upper right corner
-        LLc = char(9562);   % lower left corner
-        LRc = char(9565);   % lower right corner
-        HL  = char(9552);   % horizontal line
-        VL  = char(9553);   % vertical line
-        
-end %switch
+% choose characters
 
+ULc = ' ';   % upper left corner
+URc = ' ';   % upper right corner
+LLc = '|';   % lower left corner
+LRc = '|';   % lower right corner
+HL  = '_';   % horizontal line
+VL  = '|';   % vertical line
+ 
+% print
 
 fprintf('\n\n');
 fprintf('%s', ULc);
