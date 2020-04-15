@@ -14,7 +14,7 @@ classdef OmeReaderWrapper < matlab.mixin.Copyable
     end % properties
     
     properties (SetAccess = private, Hidden = true)
-        vid
+        vo
         specs
     end
     
@@ -83,7 +83,6 @@ classdef OmeReaderWrapper < matlab.mixin.Copyable
             %specs.laser = omeMeta.getChannelExcitationWavelength(0, 0).value().doubleValue();
             
             % translate now for wrapper
-            obj.FrameRate
             obj.Width = obj.specs.sizex;
             obj.Height = obj.specs.sizey;
             obj.TotalNumberOfFrames = obj.specs.TotImages;
@@ -97,18 +96,26 @@ classdef OmeReaderWrapper < matlab.mixin.Copyable
         end % function
         
         % reader
-        function fs = read(obj)
+        function fs = read(obj, frame_boundaries)
+            %read frameboundaries allows to bypass the firstframe lastframe
+            %inputs in the class constructor. only used if you want to read
+            %a sub-subset of frames, e.g. the 1st second in DDM_Analysis
+            %for motion estimation
+            if nargin < 2 || isempty(frame_boundaries) 
+                frame_boundaries = [obj.FirstFrame, obj.LastFrame];
+            end %if
+            number_of_frames = diff(frame_boundaries) + 1;
             
             ff = obj.vo.bfGetPlane(1); % read first frame to get type
-            image_data = zeros(obj.height, obj.width, obj.NumberOfFrames, class(ff));
+            fs = zeros(obj.Height, obj.Width, number_of_frames, class(ff));
             
             if obj.specs.numChannels == 1
                 
-                for dat = obj.FirstFrame : obj.LastFrame
-                    image_data(:,:,dat) = bfGetPlane(reader,dat);
+                for dat = frame_boundaries(1) : frame_boundaries(2)
+                    fs(:,:,dat) = obj.vo.bfGetPlane(dat);
                 end % for
             else
-                error('Only one-channel uint8 videos are supported at the moment')
+                error('Only one-channel videos are supported at the moment')
             end % if
             
 %             if obj.specs.numChannels == 1

@@ -518,7 +518,7 @@ end %function
 
 
 function [] = splash()
-%%
+
 home
 
 

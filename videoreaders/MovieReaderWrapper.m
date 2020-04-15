@@ -14,7 +14,7 @@ classdef MovieReaderWrapper < matlab.mixin.Copyable
     end % properties
     
     properties (SetAccess = private, Hidden = true)
-        vid
+        vo
     end
     
     methods
@@ -49,13 +49,18 @@ classdef MovieReaderWrapper < matlab.mixin.Copyable
         end % function
         
         % reader
-        function fs = read(obj)
-            user=memory;
-            user.MemUsedMATLAB/(1024)^2
+        function fs = read(obj, frame_boundaries)
+            %read frameboundaries allows to bypass the firstframe lastframe
+            %inputs in the class constructor. only used if you want to read
+            %a sub-subset of frames, e.g. the 1st second in DDM_Analysis
+            %for motion estimation
+            if nargin < 2 || isempty(frame_boundaries) 
+                frame_boundaries = [obj.FirstFrame, obj.LastFrame];
+            end %if
+
             % simply call the moviereader method
-            fs = obj.vo.read([obj.FirstFrame, obj.LastFrame]);
-            user=memory;
-            user.MemUsedMATLAB/(1024)^2
+            fs = obj.vo.read(frame_boundaries);
+
         end % function
         
     end % methods

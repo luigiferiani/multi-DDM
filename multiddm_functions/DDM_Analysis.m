@@ -114,7 +114,6 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             fprintf('\nLoading file... ');
             
-            global fs;
             % initialise video reader only
             obj.vid = select_video_reader(...
                 fullfile(obj.Filepath, obj.Filename),...
@@ -124,18 +123,26 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             props = {'FirstFrame', 'LastFrame', 'NumberOfFrames',...
                 'Height', 'Width', 'TotalNumberOfFrames',...
                 'FrameRate', 'Magnification', 'px2mum'};
-            for prop = props
+            for prop_ = props
+                prop = prop_{1};
                 obj.(prop) = obj.vid.(prop);
             end % for
+
             
             % read video
-            fs = obj.vid.read;
+            % I found the global variable to be the fastest way to allow
+            % all functions to access fs without it being a property
+            % maybe I can write a custom 'save' command that will delete
+            % the property 'fs' before saving the class on disk
+            global fs;
+            obj.load_movie; % writes it into fs
+%             fs = obj.vid.read;
             
             % set magnification (if not read from metadata e.g. in OME)
-            if isempty(obj.Magnification)
+            if isempty(obj.px2mum)
                 obj.set_magnification;
             end % if
-            
+
 %             if isempty(strfind(filename,'.movie'))
 %                 disp(filename)
 %                 [fs, vi] = avi2greyscaleframestack(fullfile(obj.Filepath,obj.Filename));
@@ -207,7 +214,6 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             %% initialising some global parameters
             obj.max_tau = floor(obj.NumberOfFrames/2);
             obj.max_tau_fitted = floor(obj.max_tau/2); %default, maybe change in future
-            obj.set_magnification;
             obj.set_temperature;
         end
         
@@ -219,7 +225,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 global fs;
                 if isempty(fs)
                     fprintf('fs was empty, loading the movie now... ');
-                    obj.vid.read;
+                    obj.load_movie;
+%                     obj.vid.read;
                 end
                 cprintf('*[0 .5 0]','Done!')
             end
@@ -516,7 +523,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             global fs;
             if size(fs) ~= horzcat(obj.Height, obj.Width, obj.NumberOfFrames)
                 cprintf('*[1 .3 0]','It looks like the video in the memory is not the same as specified by the instance of the class. Loading the proper video...');
-                fs = obj.vid.read;
+%                 fs = obj.vid.read;
+                obj.load_movie;
             end
             
             fprintf('\nAll previous kimographs for this video will be deleted!\n');
@@ -549,6 +557,12 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         %% method that loads the movie (useful if fs got cleared)
+        function obj = load_movie(obj)
+            %load_movie wrapper for internal reader's read method
+            global fs;
+            fs = obj.vid.read;
+        end % function
+        
 %         function [obj, movie_correctly_read] = load_movie(obj)
 %             
 %             movie_correctly_read = false;   %control variable for failsafe movie reading
@@ -618,10 +632,11 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         %% parse filename for magnification string
         function obj = set_magnification(obj)
             
-            px2mum_, magstr = magnification_to_micronsperpixel(...
+            [px2mum_, magstr] = magnification_to_micronsperpixel(...
                 fullfile(obj.Filepath, obj.Filename),...
                 'parameters\calibrated_magnifications.json');
-            if px2mum_ < -1
+            
+            if px2mum_ < 0
                 warning('No valid micron/pixel. Will continue anyway')
             else
                 obj.px2mum = px2mum_;
@@ -793,19 +808,25 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         
         %% read temperature file
         function obj = set_temperature(obj, channel)
+            %set_temperature read temperature from companion case (only if
+            %video was in .movie format)
+            [~,~,movie_ext] = fileparts(obj.Filename);
+            if ~strcmp(movie_ext, '.movie')
+                return
+            end % if
             
             if nargin < 2
                 channel = 0; % select TC1
             end
             channel = channel + 2; %to take into account the time vector column and C notation
             
-            TemperatureFilename = [obj.Filename(1:end-5),'temperature'];
+            TemperatureFilename = strrep(obj.Filename, movie_ext, '.temperature');
             if isprop(obj,'Filepath')
                 TemperatureFilename = fullfile(obj.Filepath,TemperatureFilename);
             end
             if isempty(dir(TemperatureFilename))
                 fprintf('\n');
-                cprintf('*[1 .3 0]',regexprep(['Temperature file not found at ',TemperatureFilename,'.'],'\','\\\\'));
+                cprintf('*[1 .3 0]',regexprep(['Temperature file not found at ',TemperatureFilename],'\','\\\\'));
             else
                 try
                     dummy = importdata(TemperatureFilename);

@@ -15,7 +15,7 @@ elseif is_videoreader
     
 elseif is_omereader
     
-    vid = OmeFileWrapper(filename, varargin{:});
+    vid = OmeReaderWrapper(filename, varargin{:});
 
 else
     

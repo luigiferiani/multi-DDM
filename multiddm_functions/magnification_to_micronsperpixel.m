@@ -23,6 +23,8 @@ elseif numel(match) == 2
 else
     warning(['Compatible magnification string not found in ', video_fname])
     microns_per_pixel = -1;
+    mag_str = [];
+    return
 end % if
 
 % convert back into a magnification string compatible with matlab
@@ -41,4 +43,5 @@ else
     % and read the found match
     microns_per_pixel = known_mags.(mag_str_tofind);
 end % if
+
 
