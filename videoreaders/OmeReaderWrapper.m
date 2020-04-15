@@ -1,3 +1,8 @@
+% Thanks to Dr Elvis Pandzic from the University of New South Wales, 
+% for sharing his code to read bioformat videos.
+% For the moment only single-channel videos are supported, but this will be
+% improved over time
+
 classdef OmeReaderWrapper < matlab.mixin.Copyable
     
     properties
