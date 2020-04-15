@@ -36,8 +36,10 @@ microscopy videos of Human Airway Epithelial Cells at the Air Liquid Interface.
 While the software is tweaked to cope with `.movie` files, it has provisions for analysing `.avi` files (as long as the necessary codecs are present, i.e. if it can be opened with `VideoReader` in MATLAB), although this feature has not been thoroughly tested.
 
 **Note:**
-The software automatically parses the file name looking for an indication of what objective was used. This is used then to set the px->um conversion. This value would only be correct on the setup described in the main text of the manuscript: Nikon Eclipse Ti-E inverted microscope (Nikon, Japan), Grasshopper®3 GS3-U3-23S6M-C CMOS camera (FLIR Integrated Imaging Solutions GmbH, Germany). 
-To fix this, in the file `./multiddm_functions/DDM_Analysis.m` you should modify the method of the class `DDM_Analysis` named `set_magnification` and provide the correct value of um/px.
+The software automatically parses the file name looking for an indication of what magnification was used. 
+In particular, the code looks for strings like "20X", "40X" (in general, a number (decimals are allowed) followed by the letter "x", or "X".
+This is used then to set the px->um conversion. Out of the box, this value would only be correct on the setup described in the main text of the manuscript: Nikon Eclipse Ti-E inverted microscope (Nikon, Japan), Grasshopper®3 GS3-U3-23S6M-C CMOS camera (FLIR Integrated Imaging Solutions GmbH, Germany). 
+To fix this, in the file `./parameters/calibrated_magnifications.json` you should modify the magnification -> um/px values.
 
 
 ## Data aggregation
