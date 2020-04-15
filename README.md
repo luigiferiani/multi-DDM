@@ -33,12 +33,12 @@ To do this, run the function `Analyse_Epithelix_func`. This will open a GUI wher
 **Note:**
 The software was developed, and mostly used, to analyse high speed
 microscopy videos of Human Airway Epithelial Cells at the Air Liquid Interface.
-While the software is tweaked to cope with `.movie` files, it has provisions for analysing other types of video files. In particular, it should work with files that can be opened with MATLAB's own `VideoReader`.
-**New** Support for bioformat videos is being added. At the moment, only single-channel, greyscale videos are supported, but this can be improved if there is interest. Shout out to Dr. Elvis Pandzic from University of New South Wales for his help (and for sharing his code, that I've integrated here). 
+While the software is tweaked to cope with `.movie` files, it has provisions for analysing other types of video files. In particular, it should work with files that can be opened with MATLAB's own `VideoReader`.  
+**New:** Support for bioformat videos is being added. At the moment, only single-channel, greyscale videos are supported, but this can be improved if there is interest. Shout out to Dr. Elvis Pandzic from University of New South Wales for his help (and for sharing his code, that I've integrated here). 
 
 **Note:**
 The software automatically parses the file name looking for an indication of what magnification was used. 
-In particular, the code looks for strings like ``20X'', ``40X'' (in general, a number (decimals are allowed) followed by the letter ``x'', or ``X''.
+In particular, the code looks for strings like ''20X'', ''40X'' (in general, a number (decimals are allowed) followed by the letter ''x'', or ''X''.
 This is used then to set the px->um conversion. Out of the box, this value would only be correct on the setup described in the main text of the manuscript: Nikon Eclipse Ti-E inverted microscope (Nikon, Japan), Grasshopper®3 GS3-U3-23S6M-C CMOS camera (FLIR Integrated Imaging Solutions GmbH, Germany). 
 To fix this, in the file `./parameters/calibrated_magnifications.json` you should modify the magnification -> um/px values.
 
