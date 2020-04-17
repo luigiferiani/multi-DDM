@@ -886,7 +886,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 end %if ~exist
                 
                 % initialise stack
-                sfd = zeros([obj.Height, obj.Width, round(obj.FrameRate)-2], 'single'); %stdfiltered diffs
+                nf = min(size(fs,3), round(obj.FrameRate)) -2; % 1 s worth, or all video
+                sfd = zeros([obj.Height, obj.Width, nf], 'single'); %stdfiltered diffs
                 for i = size(sfd,3):-1:1
                     sfd(:,:,i) = single(stdfilt( medfilt2( diff(single(fs(:,:,[i,i+2])),1,3) ,'symmetric') , ones(sfwsz)));
                 end %for
