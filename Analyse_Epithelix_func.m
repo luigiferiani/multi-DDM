@@ -93,6 +93,10 @@ filelist = dir(fullfile(data_folder,files_string));
 
 
 %% execution (do not modify!!)
+if license('test', 'Distrib_Computing_Toolbox') == 0
+    cprintf('*[1 .3 0]', 'Sorry, you do not seem to have the Parallel Computing Toolbox.')
+    cprintf('*[1 .3 0]', 'The code *should* run anyway, but it may suffer from poor performance.')
+end
 
 tic;
 timeelapsed = zeros(numel(filelist),1);

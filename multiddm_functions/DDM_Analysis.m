@@ -96,12 +96,14 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 end
             end
             
-            if isempty(gcp('nocreate'))
-                hcp = parpool; %starts parpool
-            else
-                hcp = gcp; % uses existing parpool
-            end
-            hcp.IdleTimeout = 120;
+            if license('test', 'Distrib_Computing_Toolbox')
+                if isempty(gcp('nocreate'))
+                    hcp = parpool; %starts parpool
+                else
+                    hcp = gcp; % uses existing parpool
+                end
+                hcp.IdleTimeout = 120;
+            end % if license
             %% load file
             
             obj.Filename = filename;
