@@ -691,12 +691,12 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 %                 obj.Results(ii).AverageDamping_vs_q = nanmean( horzcat(obj.Results(ii).Box(:).Damping) ,2);
                 %                 obj.Results(ii).AverageAmplitude_vs_q = nanmean( horzcat(obj.Results(ii).Box(:).Amplitude), 2);
                 
-                obj.Results(ii).MedianFrequencyVec = nanmedian(temp_Frequency_mat); % bc = box_counter %% IN HERTZ NOW!!!!
-                obj.Results(ii).AverageDamping_vs_q = trimmean( temp_Damping_mat ,20 ,2);   %% IN HERTZ NOW!!!!
-                obj.Results(ii).AverageAmplitude_vs_q = trimmean( temp_Amplitude_mat, 10 ,2);
+                obj.Results(ii).MedianFrequencyVec = prctile(temp_Frequency_mat, 50); % bc = box_counter %% IN HERTZ NOW!!!!
+                obj.Results(ii).AverageDamping_vs_q = trimmean(temp_Damping_mat, 20, 2);   %% IN HERTZ NOW!!!!
+                obj.Results(ii).AverageAmplitude_vs_q = trimmean(temp_Amplitude_mat, 10, 2);
                 
-                obj.Results(ii).MedianDamping_vs_q = nanmedian( temp_Damping_mat ,2);   %% IN HERTZ NOW!!!!
-                obj.Results(ii).MedianAmplitude_vs_q = nanmedian( temp_Amplitude_mat ,2);
+                obj.Results(ii).MedianDamping_vs_q = prctile(temp_Damping_mat, 50, 2);   %% IN HERTZ NOW!!!!
+                obj.Results(ii).MedianAmplitude_vs_q = prctile(temp_Amplitude_mat, 50, 2);
                 
                 if ~isfield(obj.Results,'qVec') %should enter here only for ii=1
                     retrieved_max_mode_fitted = numel(obj.Results(ii).AverageDamping_vs_q);
@@ -740,12 +740,14 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 imagesc(obj.std_fs); colormap jet;
                 
                 rect = round(getrect(gcf));
-                
-                rect(3) = bsz*ceil(rect(3)/bsz);
-                rect(4) = bsz*ceil(rect(4)/bsz);
-                
-                fs = fs(rect(2):rect(2)+rect(4)-1, rect(1):rect(1)+rect(3)-1,:);
             end
+            
+            % resize fs so that frame sizes are a multiple of bsz 
+            rect(3) = bsz*ceil(rect(3)/bsz);
+            rect(4) = bsz*ceil(rect(4)/bsz);
+
+            fs = fs(rect(2):rect(2)+rect(4)-1, rect(1):rect(1)+rect(3)-1,:);
+            
             
             ROI_height = rect(4);
             ROI_width  = rect(3);
