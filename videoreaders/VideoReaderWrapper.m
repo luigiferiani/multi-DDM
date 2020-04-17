@@ -31,6 +31,7 @@ classdef VideoReaderWrapper < matlab.mixin.Copyable
             end % for
             % number of frames
             obj.TotalNumberOfFrames = obj.vo.Duration * obj.FrameRate;
+            obj.TotalNumberOfFrames = floor(obj.TotalNumberOfFrames);
             
             if nargin >= 3 && ~isempty(lastframe)
                 obj.LastFrame = min(obj.TotalNumberOfFrames, lastframe);
