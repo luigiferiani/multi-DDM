@@ -21,15 +21,15 @@
 
 classdef DDM_Analysis < matlab.mixin.Copyable
     %DDM_analysis class to handle and run ddm analysis on microscope videos
-    %   Version 1.3 Changelog - 04/05/2018:
+    %   Version 1.1.3 Changelog - 04/05/2018:
     %       changed way multiDDM is done, massive speedup if user has a
     %       gpu, good speedup without. 
     %       Methods affected:Variable_BoxSize_Analysis (but no change in
     %       interface with the user), DDM_on_Boxes became
     %       Setup_DDM_on_Boxes, added fit_Boxes
-    %   Version 1.2 Changelog: 
+    %   Version 1.1.2 Changelog: 
     %       brand new motion detection algorithm, new properties
-    %   Version 1.1 Changelog: 
+    %   Version 1.1.1 Changelog: 
     %       added support to 2 slightly different ways to find good boxes
     %       based on std_fs: by setting flag_ditch_imadjust it should work
     %       better on FOVs with just a few beating cells. This can be done
@@ -39,8 +39,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
     properties
         Filename            %Name of the video file
         Filepath            %Name of file path
-        height              %rows of video, (px)
-        width               %cols of video, (px)
+        Height              %rows of video, (px)
+        Width               %cols of video, (px)
         TotalNumberOfFrames %N_frames as written in the movie header
         FirstFrame          %first frame to analyse
         LastFrame           %last frame to analyse
@@ -65,6 +65,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
     end
     
     properties (SetAccess = private, Hidden = true)
+        vid
         col_sum_std_fs
         row_sum_std_fs
         col_sum_lstd_sfd
@@ -87,7 +88,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 frameboundaries = [];
             end
             
-            if nargin < 2
+            if nargin < 2 || isempty(filepath)
                 if numel(dummy_string) == 1
                     filepath = pwd;
                 else
@@ -95,74 +96,103 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 end
             end
             
-            if isempty(gcp('nocreate'))
-                hcp = parpool; %starts parpool
-            else
-                hcp = gcp; % uses existing parpool
-            end
-            hcp.IdleTimeout = 120;
+            if license('test', 'Distrib_Computing_Toolbox')
+                if isempty(gcp('nocreate'))
+                    hcp = parpool; %starts parpool
+                else
+                    hcp = gcp; % uses existing parpool
+                end
+                hcp.IdleTimeout = 120;
+            end % if license
             %% load file
             
             obj.Filename = filename;
             obj.Filepath = filepath;
             
             if isempty(frameboundaries)
-                obj.FirstFrame = 1;
-            else
-                obj.FirstFrame = max(1,min(frameboundaries));
+                firstframe = [];
+                lastframe = [];
             end
             
             fprintf('\nLoading file... ');
             
+            % initialise video reader only
+            obj.vid = select_video_reader(...
+                fullfile(obj.Filepath, obj.Filename),...
+                firstframe, lastframe);
+            
+            % copy properties from video reader to DDM class
+            props = {'FirstFrame', 'LastFrame', 'NumberOfFrames',...
+                'Height', 'Width', 'TotalNumberOfFrames',...
+                'FrameRate', 'Magnification', 'px2mum'};
+            for prop_ = props
+                prop = prop_{1};
+                obj.(prop) = obj.vid.(prop);
+            end % for
+
+            
+            % read video
+            % I found the global variable to be the fastest way to allow
+            % all functions to access fs without it being a property
+            % maybe I can write a custom 'save' command that will delete
+            % the property 'fs' before saving the class on disk
             global fs;
-            if isempty(strfind(filename,'.movie'))
-                disp(filename)
-                [fs, vi] = avi2greyscaleframestack(fullfile(obj.Filepath,obj.Filename));
-                obj.height      = vi.Height;
-                obj.width       = vi.Width;
-                obj.FrameRate   = vi.FrameRate;
-                if isempty(frameboundaries)
-                    obj.LastFrame   = vi.NumberOfFrames;
-                else
-                    obj.LastFrame = min(vi.NumberOfFrames,max(frameboundaries));
-                end
-                obj.TotalNumberOfFrames = vi.NumberOfFrames;
-                obj.NumberOfFrames = obj.LastFrame-obj.FirstFrame+1;
-                obj.IsMovieCorrupted = false;
-                fs = fs(:,:,obj.FirstFrame:obj.LastFrame);
-                
-            elseif strfind(filename,'.movie')
-                
-                if ~which('moviereader')
-                    error('Cannot open .movie videos');
-                else
-                    mo = moviereader(fullfile(obj.Filepath,obj.Filename));
-                    obj.height      = double(mo.height);
-                    obj.width       = double(mo.width);
-                    if isempty(frameboundaries)
-                        obj.LastFrame   = mo.NumberOfFrames;
-                    else
-                        obj.LastFrame = min(mo.NumberOfFrames,max(frameboundaries));
-                    end
-                    obj.TotalNumberOfFrames = mo.NumberOfFrames;
-                    
-                    obj.load_movie;
-                    %                     obj.FrameRate   = mo.FrameRate;
-                    
-                    if obj.IsMovieCorrupted    %warn user that the movie was corrupted
-                        cprintf('*[1 .3 0]',['Movie file was corrupted, only ',num2str(obj.NumberOfFrames),' frames out of ',num2str(obj.TotalNumberOfFrames),' were read. ']);
-                    end
-                end
-                
-            end
+            obj.load_movie; % writes it into fs
+%             fs = obj.vid.read;
+            
+            % set magnification (if not read from metadata e.g. in OME)
+            if isempty(obj.px2mum)
+                obj.set_magnification;
+            end % if
+
+%             if isempty(strfind(filename,'.movie'))
+%                 disp(filename)
+%                 [fs, vi] = avi2greyscaleframestack(fullfile(obj.Filepath,obj.Filename));
+%                 obj.Height      = vi.Height;
+%                 obj.Width       = vi.Width;
+%                 obj.FrameRate   = vi.FrameRate;
+%                 if isempty(frameboundaries)
+%                     obj.LastFrame   = vi.NumberOfFrames;
+%                 else
+%                     obj.LastFrame = min(vi.NumberOfFrames,max(frameboundaries));
+%                 end
+%                 obj.TotalNumberOfFrames = vi.NumberOfFrames;
+%                 obj.NumberOfFrames = obj.LastFrame-obj.FirstFrame+1;
+%                 obj.IsMovieCorrupted = false;
+%                 fs = fs(:,:,obj.FirstFrame:obj.LastFrame);
+%                 
+%             elseif strfind(filename,'.movie')
+%                 
+%                 if ~which('moviereader')
+%                     error('Cannot open .movie videos');
+%                 else
+%                     mo = moviereader(fullfile(obj.Filepath,obj.Filename));
+%                     obj.Height      = double(mo.Height);
+%                     obj.Width       = double(mo.Width);
+%                     if isempty(frameboundaries)
+%                         obj.LastFrame   = mo.NumberOfFrames;
+%                     else
+%                         obj.LastFrame = min(mo.NumberOfFrames,max(frameboundaries));
+%                     end
+%                     obj.TotalNumberOfFrames = mo.NumberOfFrames;
+%                     
+%                     obj.load_movie;
+%                     %                     obj.FrameRate   = mo.FrameRate;
+%                     
+%                     if obj.IsMovieCorrupted    %warn user that the movie was corrupted
+%                         cprintf('*[1 .3 0]',['Movie file was corrupted, only ',num2str(obj.NumberOfFrames),' frames out of ',num2str(obj.TotalNumberOfFrames),' were read. ']);
+%                     end
+%                 end
+%                 
+%             end
             cprintf('*[0 .5 0]','Done!')
             
             %% calculating standard deviation of video  % deprecated as a motion detection algorithm but let's keep it
             
             fprintf('\nCalculating standard deviation of pixel intensity through time... ');
-%             std_fs = zeros(obj.height,obj.width,'single');
-            std_fs = zeros(obj.height,obj.width,'double');
-            parfor i=1:obj.height    %doing the std of the entire video is too RAM expensive, so for loop on the rows
+%             std_fs = zeros(obj.Height,obj.Width,'single');
+            std_fs = zeros(obj.Height,obj.Width,'double');
+            parfor i=1:obj.Height    %doing the std of the entire video is too RAM expensive, so for loop on the rows
 %                 std_fs(i,:) = squeeze( std( single( fs(i,:,:) ) ,1,3) );
                 std_fs(i,:) = squeeze( std( double( fs(i,:,:) ) ,0,3) );
             end
@@ -186,7 +216,6 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             %% initialising some global parameters
             obj.max_tau = floor(obj.NumberOfFrames/2);
             obj.max_tau_fitted = floor(obj.max_tau/2); %default, maybe change in future
-            obj.set_magnification;
             obj.set_temperature;
         end
         
@@ -199,6 +228,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 if isempty(fs)
                     fprintf('fs was empty, loading the movie now... ');
                     obj.load_movie;
+%                     obj.vid.read;
                 end
                 cprintf('*[0 .5 0]','Done!')
             end
@@ -209,8 +239,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             if isvector(boxsizevect)
                 boxsizevect = boxsizevect(:); %if vector put it in column
             end
-            if any(boxsizevect > obj.width | boxsizevect > obj.height)
-                boxsizevect(boxsizevect > obj.width | boxsizevect > obj.height) = min(obj.width, obj.height);
+            if any(boxsizevect > obj.Width | boxsizevect > obj.Height)
+                boxsizevect(boxsizevect > obj.Width | boxsizevect > obj.Height) = min(obj.Width, obj.Height);
                 cprintf('*[1 .3 0]','At least one BoxSize is bigger than of the dimensions of the field of view. Shrinking it now.');
             end
             if any(mod(boxsizevect,2)) %at least one of the boxsize is odd
@@ -298,8 +328,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             %% input check (function may be called directly by user, but it shouldn't)
             
             if ~isscalar(BoxSize), error('BoxSize must be a scalar - to use an array, call VariableBoxSize_Analysis instead!!');end
-            if BoxSize > obj.width || BoxSize > obj.height
-                BoxSize = min(obj.width, obj.height);
+            if BoxSize > obj.Width || BoxSize > obj.Height
+                BoxSize = min(obj.Width, obj.Height);
                 cprintf('*[1 .3 0]',['Impossible to run the analysis with the desired BoxSize, as it is bigger than at least one of the dimensions of the field of view. The analysis will be run on the maximum possible BoxSize, i.e. BoxSize = ',num2str(BoxSize)]);
             end
             if mod(BoxSize,2) %if odd BoxSize reduce of 1
@@ -331,8 +361,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             %% prediction on sizes
             
-            N_Boxes_row = floor(obj.height / BoxSize);   %number of boxes that fit (vertically) in the field of view given BoxSize
-            N_Boxes_col = floor(obj.width  / BoxSize);    %number of boxes that fit (horizontally) in the field of view given BoxSize
+            N_Boxes_row = floor(obj.Height / BoxSize);   %number of boxes that fit (vertically) in the field of view given BoxSize
+            N_Boxes_col = floor(obj.Width  / BoxSize);    %number of boxes that fit (horizontally) in the field of view given BoxSize
             N_Boxes = N_Boxes_row * N_Boxes_col;        %number of boxes that fit (in total) in the field of view given BoxSize
             
             max_mode = BoxSize/2;           %number of rows of Iqtau
@@ -361,18 +391,18 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             fprintf('\n\t\tChoosing ROI placement... ');
             
-            col_span = N_Boxes_col * BoxSize;     %width of total DDM-analysed region (multiple of BoxSize)
-            row_span = N_Boxes_row * BoxSize;    %height of total DDM-analysed region (multiple of BoxSize)
+            col_span = N_Boxes_col * BoxSize;     %Width of total DDM-analysed region (multiple of BoxSize)
+            row_span = N_Boxes_row * BoxSize;    %Height of total DDM-analysed region (multiple of BoxSize)
             
             %find where to place (in the horizontal direction) the [row_span, col_span] region to be DDM-analysed
-            for i = obj.width - col_span + 1 : -1 : 1  %sneaky allocation
+            for i = obj.Width - col_span + 1 : -1 : 1  %sneaky allocation
 %                 dummy(i) = sum(obj.col_sum_std_fs(i:i+col_span-1));
                 dummy(i) = sum(obj.col_sum_lstd_sfd(i:i+col_span-1));
             end
             [~,col_offset] = max(dummy);
             clear dummy
             %find where to place (in the vertical direction) the [row_span, col_span] region to be DDM-analysed
-            for i = obj.height - row_span + 1 : -1 : 1  %sneaky allocation
+            for i = obj.Height - row_span + 1 : -1 : 1  %sneaky allocation
 %                 dummy(i) = sum(obj.row_sum_std_fs(i:i+row_span-1));
                 dummy(i) = sum(obj.row_sum_lstd_sfd(i:i+row_span-1));
             end
@@ -493,9 +523,10 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             end
             
             global fs;
-            if size(fs) ~= horzcat(obj.height, obj.width, obj.NumberOfFrames)
+            if size(fs) ~= horzcat(obj.Height, obj.Width, obj.NumberOfFrames)
                 cprintf('*[1 .3 0]','It looks like the video in the memory is not the same as specified by the instance of the class. Loading the proper video...');
-                fs = load_movie(obj);
+%                 fs = obj.vid.read;
+                obj.load_movie;
             end
             
             fprintf('\nAll previous kimographs for this video will be deleted!\n');
@@ -509,7 +540,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 [col_kind, row_kind, ffprofile] = improfile;
                 col_kind = round(col_kind);
                 row_kind = round(row_kind);
-                obj.Kymograph(ki).ind = sub2ind([obj.height, obj.width], row_kind, col_kind);
+                obj.Kymograph(ki).ind = sub2ind([obj.Height, obj.Width], row_kind, col_kind);
                 obj.Kymograph(ki).kymo = zeros(numel(col_kind),obj.NumberOfFrames,'double');
                 
             end
@@ -528,126 +559,91 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         end
         
         %% method that loads the movie (useful if fs got cleared)
-        function [obj, movie_correctly_read] = load_movie(obj)
-            
-            movie_correctly_read = false;   %control variable for failsafe movie reading
-            
+        function obj = load_movie(obj)
+            %load_movie wrapper for internal reader's read method
             global fs;
-            if isprop(obj,'Filepath')
-                fullpath = fullfile(obj.Filepath,obj.Filename);
-            else
-                fullpath = obj.Filename;
-            end
-            
-            [~,~,ext] = fileparts(fullpath);
-            
-            if strcmp(ext,'.movie')
-                try
-                    mo = moviereader(fullpath);
-                catch
-                    cprintf('Red','The movie is not present at the path specified ');
-                    return
-                end
-                
-                obj.IsMovieCorrupted = false;
-                
-                while movie_correctly_read == false %try to read the movie until it works
-                    try
-                        fs = mo.read([obj.FirstFrame obj.LastFrame]);  %try to read the movie
-                        movie_correctly_read = true;        %if it works put flag to 1
-                        
-                    catch err                               %if it doesn't work, then
-                        if strcmp(err.identifier,'moviereader:WrongMagicAtFrame')
-                            obj.LastFrame = str2double(err.message)-1;  %try to read again, ditching the last frame (I guess I could use a "finding" algorithm here)
-                        else
-                            obj.LastFrame = obj.LastFrame - 1;
-                        end
-                        obj.IsMovieCorrupted = true;        %set the flag that the movie was corrupted
-                        
-                    end                                     %and try again
-                    
-                end
-                
-                
-                fs(:,:,end) = []; %ditches the last frame anyway, which may still be corrupted
-                obj.LastFrame = obj.LastFrame - 1;
-                
-                if obj.IsMovieCorrupted
-                    cprintf('Red','The movie is corrupted ')
-                end
-                
-                
-                
-                obj.FrameRate   = mo.FrameRate;
-                obj.NumberOfFrames = obj.LastFrame - obj.FirstFrame + 1;
-                
-                
-                
-            else
-                fs = avi2greyscaleframestack(fullpath);
-                fs = fs(:,:,obj.FirstFrame:obj.LastFrame);
-            end
-            
-            if obj.NumberOfFrames ~= size(fs,3)
-                error('mistake here')
-            end
-            
-        end
+            fs = obj.vid.read;
+        end % function
+        
+%         function [obj, movie_correctly_read] = load_movie(obj)
+%             
+%             movie_correctly_read = false;   %control variable for failsafe movie reading
+%             
+%             global fs;
+%             if isprop(obj,'Filepath')
+%                 fullpath = fullfile(obj.Filepath,obj.Filename);
+%             else
+%                 fullpath = obj.Filename;
+%             end
+%             
+%             [~,~,ext] = fileparts(fullpath);
+%             
+%             if strcmp(ext,'.movie')
+%                 try
+%                     mo = moviereader(fullpath);
+%                 catch
+%                     cprintf('Red','The movie is not present at the path specified ');
+%                     return
+%                 end
+%                 
+%                 obj.IsMovieCorrupted = false;
+%                 
+%                 while movie_correctly_read == false %try to read the movie until it works
+%                     try
+%                         fs = mo.read([obj.FirstFrame obj.LastFrame]);  %try to read the movie
+%                         movie_correctly_read = true;        %if it works put flag to 1
+%                         
+%                     catch err                               %if it doesn't work, then
+%                         if strcmp(err.identifier,'moviereader:WrongMagicAtFrame')
+%                             obj.LastFrame = str2double(err.message)-1;  %try to read again, ditching the last frame (I guess I could use a "finding" algorithm here)
+%                         else
+%                             obj.LastFrame = obj.LastFrame - 1;
+%                         end
+%                         obj.IsMovieCorrupted = true;        %set the flag that the movie was corrupted
+%                         
+%                     end                                     %and try again
+%                     
+%                 end
+%                 
+%                 
+%                 fs(:,:,end) = []; %ditches the last frame anyway, which may still be corrupted
+%                 obj.LastFrame = obj.LastFrame - 1;
+%                 
+%                 if obj.IsMovieCorrupted
+%                     cprintf('Red','The movie is corrupted ')
+%                 end
+%                 
+%                 
+%                 
+%                 obj.FrameRate   = mo.FrameRate;
+%                 obj.NumberOfFrames = obj.LastFrame - obj.FirstFrame + 1;
+%                 
+%                 
+%                 
+%             else
+%                 fs = avi2greyscaleframestack(fullpath);
+%                 fs = fs(:,:,obj.FirstFrame:obj.LastFrame);
+%             end
+%             
+%             if obj.NumberOfFrames ~= size(fs,3)
+%                 error('mistake here')
+%             end
+%             
+%         end
         
         %% parse filename for magnification string
         function obj = set_magnification(obj)
             
-            if ~isempty(regexpi(obj.Filename,'4X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '6X';
-                    obj.px2mum = 0.9727;
-                else
-                    obj.Magnification = '4X';
-                    obj.px2mum = 1.459;
-                end
-            elseif ~isempty(regexpi(obj.Filename,'10X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '15X';
-                    obj.px2mum = 0.3893;
-                else
-                    obj.Magnification = '10X';
-                    obj.px2mum = 0.584;
-                end
-            elseif ~isempty(regexpi(obj.Filename,'20X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '30X';
-                    obj.px2mum = 0.195;
-                else
-                    obj.Magnification = '20X';
-                    obj.px2mum = 0.292;
-                end
-            elseif ~isempty(regexpi(obj.Filename,'30X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '45X';
-                    obj.px2mum = 0.13;
-                else
-                    obj.Magnification = '30X';
-                    obj.px2mum = 0.195;
-                end
-            elseif ~isempty(regexpi(obj.Filename,'40X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '60X';
-                    obj.px2mum = 0.0973;
-                else
-                    obj.Magnification = '40X';
-                    obj.px2mum = 0.146;
-                end
-            elseif ~isempty(regexpi(obj.Filename,'60X'))
-                if ~isempty(regexpi(obj.Filename,'1.5X'))
-                    obj.Magnification = '90X';
-                    obj.px2mum = 0.0647;
-                else
-                    obj.Magnification = '60X';
-                    obj.px2mum = 0.097;
-                end
+            [px2mum_, magstr] = magnification_to_micronsperpixel(...
+                fullfile(obj.Filepath, obj.Filename),...
+                'parameters\calibrated_magnifications.json');
+            
+            if px2mum_ < 0
+                warning('No valid micron/pixel. Will continue anyway')
             else
-                cprintf('*[1 .3 0]','\n Couldn''t find magnification string in namefile.');
-            end
+                obj.px2mum = px2mum_;
+                obj.Magnification = magstr;
+            end %if
             
         end
         
@@ -666,8 +662,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 if ~isfield(obj.Results(ii),'ind_good_boxes') ||...
                         (isfield(obj.Results(ii),'ind_good_boxes') && isempty(obj.Results(ii).ind_good_boxes) ) || ...
                         flag_recalculate_good_boxes
-%                     row_span = floor(obj.height / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;   %number of boxes that fit (vertically) in the field of view given BoxSize
-%                     col_span = floor(obj.width  / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;
+%                     row_span = floor(obj.Height / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;   %number of boxes that fit (vertically) in the field of view given BoxSize
+%                     col_span = floor(obj.Width  / obj.Results(ii).BoxSize) * obj.Results(ii).BoxSize;
 %                     ind_good_boxes = find_good_boxes(obj.std_fs(obj.Results(ii).row_offset:obj.Results(ii).row_offset+row_span-1,obj.Results(ii).col_offset:obj.Results(ii).col_offset+col_span-1), ...
 %                         obj.Results(ii).BoxSize, flag_ditch_imadjust);
                     ind_good_boxes = obj.find_boxes_with_motion(obj.Results(ii).row_offset,...
@@ -695,12 +691,12 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 %                 obj.Results(ii).AverageDamping_vs_q = nanmean( horzcat(obj.Results(ii).Box(:).Damping) ,2);
                 %                 obj.Results(ii).AverageAmplitude_vs_q = nanmean( horzcat(obj.Results(ii).Box(:).Amplitude), 2);
                 
-                obj.Results(ii).MedianFrequencyVec = nanmedian(temp_Frequency_mat); % bc = box_counter %% IN HERTZ NOW!!!!
-                obj.Results(ii).AverageDamping_vs_q = trimmean( temp_Damping_mat ,20 ,2);   %% IN HERTZ NOW!!!!
-                obj.Results(ii).AverageAmplitude_vs_q = trimmean( temp_Amplitude_mat, 10 ,2);
+                obj.Results(ii).MedianFrequencyVec = prctile(temp_Frequency_mat, 50); % bc = box_counter %% IN HERTZ NOW!!!!
+                obj.Results(ii).AverageDamping_vs_q = trimmean(temp_Damping_mat, 20, 2);   %% IN HERTZ NOW!!!!
+                obj.Results(ii).AverageAmplitude_vs_q = trimmean(temp_Amplitude_mat, 10, 2);
                 
-                obj.Results(ii).MedianDamping_vs_q = nanmedian( temp_Damping_mat ,2);   %% IN HERTZ NOW!!!!
-                obj.Results(ii).MedianAmplitude_vs_q = nanmedian( temp_Amplitude_mat ,2);
+                obj.Results(ii).MedianDamping_vs_q = prctile(temp_Damping_mat, 50, 2);   %% IN HERTZ NOW!!!!
+                obj.Results(ii).MedianAmplitude_vs_q = prctile(temp_Amplitude_mat, 50, 2);
                 
                 if ~isfield(obj.Results,'qVec') %should enter here only for ii=1
                     retrieved_max_mode_fitted = numel(obj.Results(ii).AverageDamping_vs_q);
@@ -715,7 +711,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             
             
             if ~isfield(obj.SAVAlike,'ind_good_bins') && ~isempty(obj.SAVAlike)
-                bsz = mean(floor([obj.height, obj.width]./size(obj.SAVAlike.frequency_map)));
+                bsz = mean(floor([obj.Height, obj.Width]./size(obj.SAVAlike.frequency_map)));
 %                 obj.SAVAlike.ind_good_bins = find_good_boxes(obj.std_fs,bsz);
                 obj.SAVAlike.ind_good_bins = obj.find_boxes_with_motion(1,1,bsz);
                 ind = obj.SAVAlike.frequency_map(:) > 1 & obj.SAVAlike.frequency_map(:) < 30; %physical constraints
@@ -737,19 +733,24 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             fprintf('\nStarting SAVA-like CBF measurement...');
             
             
-            rect = [1 1 obj.width obj.height];
+            rect = [1 1 obj.Width obj.Height];
             
             if flag_ROI %select ROI
                 figure(11002);
                 imagesc(obj.std_fs); colormap jet;
                 
                 rect = round(getrect(gcf));
-                
-                rect(3) = bsz*ceil(rect(3)/bsz);
-                rect(4) = bsz*ceil(rect(4)/bsz);
-                
-                fs = fs(rect(2):rect(2)+rect(4)-1, rect(1):rect(1)+rect(3)-1,:);
             end
+            
+            % resize fs so that frame sizes are a multiple of bsz 
+            rect(3) = bsz*ceil(rect(3)/bsz);
+            rect(4) = bsz*ceil(rect(4)/bsz);
+            % resize only if needed
+            if (rect(3) ~= obj.Width) || (rect(4) ~= obj.Height)
+                fs = fs(rect(2):rect(2)+rect(4)-1,...
+                    rect(1):rect(1)+rect(3)-1,:);
+            end % if
+            
             
             ROI_height = rect(4);
             ROI_width  = rect(3);
@@ -814,19 +815,25 @@ classdef DDM_Analysis < matlab.mixin.Copyable
         
         %% read temperature file
         function obj = set_temperature(obj, channel)
+            %set_temperature read temperature from companion case (only if
+            %video was in .movie format)
+            [~,~,movie_ext] = fileparts(obj.Filename);
+            if ~strcmp(movie_ext, '.movie')
+                return
+            end % if
             
             if nargin < 2
                 channel = 0; % select TC1
             end
             channel = channel + 2; %to take into account the time vector column and C notation
             
-            TemperatureFilename = [obj.Filename(1:end-5),'temperature'];
+            TemperatureFilename = strrep(obj.Filename, movie_ext, '.temperature');
             if isprop(obj,'Filepath')
                 TemperatureFilename = fullfile(obj.Filepath,TemperatureFilename);
             end
             if isempty(dir(TemperatureFilename))
                 fprintf('\n');
-                cprintf('*[1 .3 0]',regexprep(['Temperature file not found at ',TemperatureFilename,'.'],'\','\\\\'));
+                cprintf('*[1 .3 0]',regexprep(['Temperature file not found at ',TemperatureFilename],'\','\\\\'));
             else
                 try
                     dummy = importdata(TemperatureFilename);
@@ -873,8 +880,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                     
                         % read the first second
                         try
-                            mo = moviereader(fullfile(obj.Filepath, obj.Filename));
-                            fs = mo.read([1 round(obj.FrameRate)]);
+                            fs = obj.vid.read([1 round(obj.FrameRate)]);
                         catch EE
                             disp('Error trying to read:')
                             disp(fullfile(obj.Filepath, obj.Filename))
@@ -885,7 +891,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 end %if ~exist
                 
                 % initialise stack
-                sfd = zeros([obj.height, obj.width, round(obj.FrameRate)-2], 'single'); %stdfiltered diffs
+                nf = min(size(fs,3), round(obj.FrameRate)) -2; % 1 s worth, or all video
+                sfd = zeros([obj.Height, obj.Width, nf], 'single'); %stdfiltered diffs
                 for i = size(sfd,3):-1:1
                     sfd(:,:,i) = single(stdfilt( medfilt2( diff(single(fs(:,:,[i,i+2])),1,3) ,'symmetric') , ones(sfwsz)));
                 end %for
@@ -965,8 +972,8 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 obj.motion_detection;
             end
             
-            row_span = floor(obj.height / bsz) * bsz;   %number of boxes that fit (vertically) in the field of view given BoxSize
-            col_span = floor(obj.width  / bsz) * bsz;
+            row_span = floor(obj.Height / bsz) * bsz;   %number of boxes that fit (vertically) in the field of view given BoxSize
+            col_span = floor(obj.Width  / bsz) * bsz;
 
             % chop the edges of detected motion off according to row_offset
             % and col_offset

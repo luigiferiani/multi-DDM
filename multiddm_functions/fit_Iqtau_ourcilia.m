@@ -106,8 +106,10 @@ init_Damping = fit_output.Damp;
 %     pause
 
 %% fit of the I(q',tau) curves
-hpool = gcp; %if no parpool opened, opens a new one
-parfor qq = 1:max_q
+if license('test', 'Distrib_Computing_Toolbox')
+    hpool = gcp; %if no parpool opened, opens a new one
+end 
+parfor qq = 1:max_q % parfor should work even without parallel comp toolbox
 % for qq = 1:max_q
     
     xx = (1:max_tau)';
