@@ -745,8 +745,11 @@ classdef DDM_Analysis < matlab.mixin.Copyable
             % resize fs so that frame sizes are a multiple of bsz 
             rect(3) = bsz*ceil(rect(3)/bsz);
             rect(4) = bsz*ceil(rect(4)/bsz);
-
-            fs = fs(rect(2):rect(2)+rect(4)-1, rect(1):rect(1)+rect(3)-1,:);
+            % resize only if needed
+            if (rect(3) ~= obj.Width) || (rect(4) ~= obj.Height)
+                fs = fs(rect(2):rect(2)+rect(4)-1,...
+                    rect(1):rect(1)+rect(3)-1,:);
+            end % if
             
             
             ROI_height = rect(4);

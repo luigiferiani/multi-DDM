@@ -54,3 +54,17 @@ cilia.gather_results;
 clearvars -global fs
 cilia.VariableBoxSize_Analysis(boxsizes_encore);
 cilia.gather_results;
+
+%% test mp4
+clear global
+clearvars cilia
+
+filename = '60X.avi';
+filepath = 'F:\Data\Cilia_Colorado_Anschutz\Data';
+
+cilia = DDM_Analysis(filename, filepath);
+cilia.set_temperature(1);
+cilia.N_couple_frames_to_average = 100;
+cilia.VariableBoxSize_Analysis([60, 16, 8]);
+cilia.SAVAlike_CBF_measurement;
+cilia.gather_results;
