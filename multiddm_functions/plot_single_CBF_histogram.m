@@ -12,7 +12,7 @@ function [ hf ] = plot_single_CBF_histogram( MergedData, BoxSizeIndex, binedges,
 %   
 %   binedges is an array with the edges of the bins for the histogram
 %   (similar to what MATLAB's histogram function accept as input). Defaults
-%   to plotting a histogram with bins 1Hz wide, between 0 and 30
+%   to plotting a histogram with bins 1Hz wide, between 0 and 60
 %
 %   flag_numbers: if True, wites mean +- std in the legend
 % 
@@ -20,7 +20,7 @@ function [ hf ] = plot_single_CBF_histogram( MergedData, BoxSizeIndex, binedges,
 
 %{
 % Version 1.0
-% © Luigi Feriani 2019 (luigi.feriani@gmail.com) 
+% Â© Luigi Feriani 2019 (luigi.feriani@gmail.com) 
 % 
 % plot_single_CBF_histogram.m is licensed under a Creative Commons 
 % Attribution-NonCommercial-NoDerivatives 4.0 International License.
@@ -51,7 +51,7 @@ end
 
 % binedges
 if nargin < 3 || isempty(binedges) || ~isvector(binedges)
-    binedges = 0:1:30;
+    binedges = 0:1:60;
 end %if
 
 
@@ -115,7 +115,7 @@ hhb.FaceAlpha = 0.2;
 if flag_numbers
     leg = ['CBF = (',...
         num2str(nanmean(MergedData.Frequency_Hz{bsi}),3),...
-        ' ± ',num2str(nanstd(MergedData.Frequency_Hz{bsi}),3), ') Hz'];
+        ' Â± ',num2str(nanstd(MergedData.Frequency_Hz{bsi}),3), ') Hz'];
 end %if
 
 
