@@ -42,7 +42,10 @@ for stc = 1:numel(sampletypes) % sampletype counter
                 % structure for easier plotting
                 MergedData = merge_SampleType_data(SampleType,...
                     stc, tpc, donors{dc}, inserts{ic}, '');
-                
+                % do not attempt a plot if empty MergedData
+                if isempty(MergedData)
+                    continue
+                end
                 % plot sigmoidal curve with left shoulder and shading
                 % showing the confidence interval
                 plot_single_sigmoid_errorbar(MergedData, true, 'left')
