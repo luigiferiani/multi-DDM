@@ -179,7 +179,7 @@ for fc = 1:numel(filelist)
         
         % controls on frequency
         bad_fits(temp_Frequency_Hz_mat <=   1)  = true;    %exclude where frequency too low (aka sth went wrong in the fit or the sample is still)
-        bad_fits(temp_Frequency_Hz_mat >=  30)  = true;    %exclude where frequency too high (aka sth went wrong in the fit)
+        bad_fits(temp_Frequency_Hz_mat >=  60)  = true;    %exclude where frequency too high (aka sth went wrong in the fit)
         bad_fits(isnan(temp_Frequency_Hz_mat))  = true;    %exclude where frequency is nan (aka sth went wrong in the fit)
         
         % controls on damping
