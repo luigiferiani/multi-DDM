@@ -714,7 +714,7 @@ classdef DDM_Analysis < matlab.mixin.Copyable
                 bsz = mean(floor([obj.Height, obj.Width]./size(obj.SAVAlike.frequency_map)));
 %                 obj.SAVAlike.ind_good_bins = find_good_boxes(obj.std_fs,bsz);
                 obj.SAVAlike.ind_good_bins = obj.find_boxes_with_motion(1,1,bsz);
-                ind = obj.SAVAlike.frequency_map(:) > 1 & obj.SAVAlike.frequency_map(:) < 30; %physical constraints
+                ind = obj.SAVAlike.frequency_map(:) > 1 & obj.SAVAlike.frequency_map(:) < 60; %physical constraints
                 ind = ind & obj.SAVAlike.ind_good_bins(:);          % discard empty bins by thresholding the std
                 obj.SAVAlike.mean_frequency = mean(obj.SAVAlike.frequency_map(ind));
                 obj.SAVAlike.std_frequency = std(obj.SAVAlike.frequency_map(ind));
