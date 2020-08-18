@@ -86,7 +86,10 @@ end
 
 % now combine
 idx_merge = idx_present_data & idx_merge_donors & idx_merge_inserts & idx_merge_positions;
-
+if sum(idx_merge) == 0
+    MergedData = []
+    return
+end
 
 %% merge the appropriate quantities
 
