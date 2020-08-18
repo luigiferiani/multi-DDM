@@ -49,8 +49,8 @@ for stc = 1:numel(sampletypes) % sampletype counter
                 
                 % plot CBF distribution measured at the tile size closest
                 % to 10um x 10um (default), using 0.5Hz wide bins between 0
-                % and 30Hz, writing mean and std in the legend
-                plot_single_CBF_histogram(MergedData, [], 0:0.5:30,1)
+                % and 60Hz, writing mean and std in the legend
+                plot_single_CBF_histogram(MergedData, [], 0:0.5:60,1)
 
 %                 structstruct(MergedData)
 
