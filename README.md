@@ -66,3 +66,14 @@ The two plotting functions uploaded in this package could be expanded in functio
 An example of this is in the figures of the publication this code is supplementary information of.
 However the code thus developed was quite specialised towards a particular
 task, and possibly less flexible and adaptable to the needs of other users. For this reason we preferred to provide a simpler plotting interface that would be a useful starting point to any user of multi-DDM.
+
+
+## Common issues and troubleshooting
+
+### Undefined function error
+e.g.:
+```
+Undefined function 'cprintf' for input arguments of type 'char'.
+```
+### Solution
+`cprintf` is the first non-standard function called by `Analyse_Epithelix_func.m`. It is defined in the `common_function` folder. [Make sure you've added *all the folders and subfolders* to the MATLAB path persistently](https://uk.mathworks.com/help/matlab/matlab_env/add-remove-or-reorder-folders-on-the-search-path.html).
