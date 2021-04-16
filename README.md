@@ -19,6 +19,7 @@ The paper that first introduces multi-DDM is instead:
 ## Installation
 
 This code depends on a few MATLAB toolboxes. You will need:
+* Image Processing Toolbox
 * Parallel Computing Toolbox
 * Curve Fitting Toolbox
 * Signal Processing Toolbox
