@@ -23,6 +23,7 @@ This code depends on a few MATLAB toolboxes. You will need:
 * Parallel Computing Toolbox
 * Curve Fitting Toolbox
 * Signal Processing Toolbox
+* Statistics and Machine Learning Toolbox
 
 Once you've made sure the dependencies above are satisfied, download or clone this repository, then [add the repository's folder (and its subfolders) to your MATLAB path](https://uk.mathworks.com/help/matlab/ref/addpath.html).
 
